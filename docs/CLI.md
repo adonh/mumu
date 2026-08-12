@@ -8,6 +8,7 @@ mimi is a macOS window and space utility. Use `mimi action` for immediate comman
 
 - [Global Flags](#global-flags)
 - [Window & Space Actions](#window--space-actions)
+- [Layout Save/Restore](#layout-saverestore)
 - [Hook Daemon](#hook-daemon)
 - [Service Management](#service-management)
 - [Configuration Management](#configuration-management)
@@ -144,6 +145,57 @@ mimi action resize_window center --width-percent 80 --height-percent 90
 
 ---
 
+## Layout Save/Restore
+
+`mimi layout` saves and restores the assignment of application windows to Mission Control spaces, keyed by the number of currently connected displays. **Requires both Accessibility and Screen Recording permissions** — Screen Recording is needed to read window titles reliably (see [Limitations](#limitations) below); no other mimi command requires it.
+
+```bash
+mimi layout save
+mimi layout restore
+mimi layout restore --yes
+mimi layout list
+mimi layout show
+mimi layout show 2
+mimi layout delete
+mimi layout delete 2
+```
+
+### Space numbering
+
+Space numbers used by `mimi layout` are counted **left to right across all connected displays**, independent of which display is primary — matching how a person visually counts spaces on screen. This is a separate numbering from `mimi action space`'s Mission Control ordering (which always lists the primary display's spaces first) and does not affect it.
+
+### `mimi layout save`
+
+Captures, for every non-fullscreen window on every space across all connected displays, its owning application's bundle identifier, window title, and logical (left-to-right) space number. Persists the result keyed by the current display count, overwriting any previous save for that same count.
+
+### `mimi layout restore [--yes]`
+
+Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app. Never creates or removes spaces — entries whose target space no longer exists are skipped and reported.
+
+If the current per-display space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
+
+### `mimi layout list`
+
+Lists every saved layout with its display count, window count, and save timestamp.
+
+### `mimi layout show [display-count]`
+
+Prints a saved layout's window entries (space number, bundle ID, title) without moving anything. Defaults to the layout for the current display count.
+
+### `mimi layout delete [display-count]`
+
+Deletes the saved layout for the given display count (default: current display count).
+
+### Limitations
+
+- **Reflow-only**: applications that have quit since save time are skipped and reported, never relaunched. This is not a full session restore.
+- **No window geometry**: only space assignment is saved — position and size are never captured or restored.
+- **Fullscreen windows are excluded** entirely, both at save and restore.
+- **Minimized-window detection is best-effort**: a minimized window on the space currently displayed on its screen is correctly excluded, but a minimized window on a space that isn't currently displayed on any screen may still be captured and restored as if it weren't minimized — there's no reliable per-window signal for that case.
+- **Manual only**: layout save/restore only happens when you run these commands directly. It's never triggered automatically by the hook daemon, on a schedule, or at login.
+
+---
+
 ## Hook Daemon
 
 ### `mimi start`
@@ -167,7 +219,7 @@ mimi stop
 
 ### `mimi status`
 
-Show whether the daemon is running, whether Accessibility permission is granted, and whether the IPC socket is available.
+Show whether the daemon is running, whether Accessibility and Screen Recording permissions are granted, and whether the IPC socket is available. Screen Recording is only required by `mimi layout`.
 
 ```bash
 mimi status

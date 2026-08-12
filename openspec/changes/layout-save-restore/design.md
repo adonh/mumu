@@ -1,0 +1,75 @@
+## Context
+
+mimi already opens an unprivileged connection to the WindowServer (`SLSMainConnectionID`) to enumerate Mission Control Spaces and move the frontmost window to a Space (`internal/native/space.m`). That numbering is primary-display-first: `SLSCopyManagedDisplaySpaces` always lists the primary display's Spaces first, then the remaining displays' Spaces in left-to-right physical order — confirmed empirically against a live 4-display setup (see proposal discussion history). This capability needs a *different*, purely left-to-right numbering that matches how a person visually counts Spaces across their displays, independent of which one is primary. It also needs to enumerate windows across *all* Spaces, not just the active one — something mimi's current AX-based window enumeration (`internal/native/window.m`) does not do, since AX only exposes `AXWindowIsOnActiveSpace` as a boolean for the currently active Space.
+
+See `proposal.md` for motivation and scope.
+
+## Goals / Non-Goals
+
+**Goals:**
+- Reassign already-open windows to the Spaces they occupied when a layout was saved, keyed to the current display count.
+- Do this without admin/root: Accessibility (mimi's existing requirement) plus Screen Recording (required specifically by this capability — see Decisions) and an unprivileged WindowServer connection.
+- Make the Space numbering used for this feature match a user's left-to-right visual mental model.
+
+**Non-Goals:**
+- Launching applications that aren't running (reflow-only in this change).
+- Creating, removing, or reordering Spaces.
+- Capturing or restoring window position/size, or fullscreen state.
+- Any automatic/scheduled save or restore (daemon/hook/login integration).
+- Changing the numbering or behavior of the existing `mimi action space` / `move_window_to_space` commands.
+
+## Decisions
+
+**Logical Space numbering is computed fresh, not reused from `SLSCopyManagedDisplaySpaces`'s raw order.** Sort connected displays by `CGDisplayBounds(display).origin.x` (public API, no permission needed), then concatenate each display's own `Spaces` array (already available via the existing `SLSCopyManagedDisplaySpaces` call) in that sorted order. This is a pure derived view computed at both save and restore time — nothing about Space identity itself changes; only the ordinal numbers mimi assigns for this feature differ from the ones `mimi action space` uses.
+_Alternative considered_: reuse the existing primary-first global index. Rejected — verified empirically that it does not match physical left-to-right layout when the primary display isn't leftmost, which contradicts the user's stated mental model for this feature.
+
+**Layouts are keyed only by display count**, not by primary position or resolution. Since the logical numbering is fully primary-agnostic and resolution was explicitly ruled immaterial, the only dimension that meaningfully invalidates a saved layout at the coarse level is how many displays are connected. Finer-grained drift (displays reordered, per-display Space counts changed) is handled at restore time by the arrangement-mismatch confirmation requirement, not by a richer key.
+_Alternative considered_: a multi-dimensional fingerprint (count + primary position + secondary ordering). Rejected as unnecessary complexity once primary position was shown to be irrelevant to the numbering and per-slot drift is already handled by the mismatch-confirmation flow.
+
+**Window enumeration (both save and restore) is driven by `CGWindowListCopyWindowInfo(kCGWindowListOptionAll)`, not AX (`kAXWindowsAttribute`).** An AX-only approach was implemented first and initially appeared correct (it found real windows on 4 different Spaces across a 4-display session), but a follow-up test — moving a window to a Space not currently displayed on any monitor, then re-querying — proved that appearance wrong: the window vanished from its owning app's `kAXWindowsAttribute` entirely. Re-examining the earlier "success" showed each of those 4 windows was on the one currently-*displayed* Space of its own display; AX had simply never been tested against a genuinely non-displayed Space. This is a hard AX limitation, not a bug: **AX only ever exposes windows on each display's currently displayed Space**, making it structurally unable to support save/restore across Spaces the user isn't currently looking at.
+`CGWindowListCopyWindowInfo(kCGWindowListOptionAll)` was re-tested with tighter filtering — `kCGWindowLayer == 0`, owner PID restricted to running apps with `NSApplicationActivationPolicyRegular`, and a resolved (non-zero) Space ID via `CGSCopySpacesForWindows` — and, unlike the raw/unfiltered pass that motivated the original AX-only decision, reliably reached the exact window AX could not see. Each candidate window's Space ID comes from `CGSCopySpacesForWindows` (private; called one window at a time, since a multi-window call returns a deduplicated, unordered union of Spaces rather than a 1:1 mapping) — this part of the design is unchanged from the original AX-based version, just no longer gated on first resolving an AX element.
+_Alternative considered_: keep AX as the source of truth and treat non-displayed-Space windows as unsupported. Rejected — that would silently drop the majority of windows in any realistic multi-Space setup, defeating the feature's purpose.
+
+**Screen Recording is a required permission for this capability, in addition to Accessibility.** `kCGWindowName` (the only source of window titles once AX is no longer used for enumeration) is redacted to empty for every window, for every process, unless the calling process holds Screen Recording permission — confirmed empirically with and without the permission granted. Since title-based matching is core to reliable restore (see the window-identity decision below), mimi treats this as a hard requirement for `mimi layout ...` commands specifically (checked via `permissions.CheckLayout`/`FriendlyErrorLayout`), not a soft/optional capability degradation. No other mimi command requires it.
+_Alternative considered_: make Screen Recording optional and fall back to index-only matching when absent. Rejected per explicit product decision — inconsistent, silently-worse matching was judged worse than a single one-time extra permission prompt.
+_Follow-up (post-implementation doc pass)_: `mimi layout --help`'s text pointed users to `mimi status` to check both permissions, but `mimi status` originally only ever reported Accessibility (matching the Manual Test Plan note below, written before this fix). `mimi status` was extended to also call `permissions.CheckLayout` and print a `screen recording: ...` line, so the help text's claim now holds.
+
+**Minimized-window detection only covers windows on a currently displayed Space.** `CGWindowListCopyWindowInfo(kCGWindowListOptionAll)` includes minimized windows with no per-window flag distinguishing them; the only reliable signal is checking a window ID's absence from a *second* call using `kCGWindowListOptionOnScreenOnly`, which does omit minimized windows — but only ever lists windows on currently displayed Spaces to begin with. So: a window on a currently-displayed Space that's absent from the on-screen list is minimized (excluded); a window on a non-displayed Space is never in the on-screen list regardless of minimized state, so it's always included. This is a known best-effort limitation (see Risks), consistent with the feature's overall reflow-only, best-effort posture.
+
+**Window identity across save/restore is heuristic: exact title match, falling back to positional index within the same app.** macOS assigns window IDs at creation time with no persistent handle across app relaunch, so exact identity matching is impossible in general. Restricting matching to *currently running* apps (per the reflow-only non-goal) removes the relaunch case entirely; the remaining ambiguity is only between multiple simultaneously-open windows of the same app.
+_Alternative considered_: index-only matching. Rejected as strictly weaker — title matching costs nothing extra and resolves the common case (windows with distinct titles) exactly.
+
+**Restore never creates/removes Spaces; it warns and asks for confirmation whenever the current arrangement doesn't exactly match what was recorded**, then proceeds best-effort if confirmed. This keeps the feature's blast radius small (it only ever *moves already-existing windows to already-existing Spaces*) and puts the user in control of any ambiguous case rather than guessing.
+
+**Persistence is a small JSON file per display count** under mimi's existing user-data directory convention (alongside the daemon's existing data files), containing schema version, display count, per-window entries (bundle ID, title, logical Space ordinal), and the per-display Space-count sequence recorded at save time (used purely to detect arrangement drift at restore, per the requirement above — not to recreate Spaces).
+
+## Risks / Trade-offs
+
+- **Private API surface** (`CGSCopySpacesForWindows`, plus the existing `SLSCopyManagedDisplaySpaces`/SkyLight linkage) is undocumented and unsupported by Apple → could break on any macOS update. Mitigation: isolate in a dedicated native file, fail closed with a clear error (consistent with the existing pattern documented in `docs/ARCHITECTURE.md`), no silent corruption of saved layouts.
+- **Screen Recording is a second, separate permission grant** beyond mimi's existing Accessibility requirement, and is noticeably more sensitive-sounding to users (the system prompt mentions screen content, not just window titles). Mitigation: only `mimi layout ...` commands check for it; every other mimi command is unaffected, and the permission error message explains exactly why it's needed.
+- **Minimized-window detection is incomplete for windows on non-displayed Spaces** — they're always included in save/restore regardless of actual minimized state, since there is no reliable per-window minimized signal for them (see Decisions). In practice this means a minimized window on a background Space may be captured and restored as if it were normal; this is a known, documented limitation rather than a bug.
+- **Title-based matching can mis-pair windows** when an app has multiple windows with identical or blank titles (e.g. several new unnamed Terminal windows). Mitigation: deterministic fallback to positional index (same ordering logic used at save time), and this limitation is explicitly documented rather than hidden.
+- **Reflow-only scope means a saved layout silently "misses" apps that have quit** since save time — the user gets a skip report per app, not a full session restore. This is an intentional non-goal, not an oversight, but should be clearly stated in `docs/CLI.md` to avoid surprising users expecting yabai/AeroSpace-style full restore.
+- **Fullscreen windows are invisible to this feature** — an app the user fullscreened before saving won't appear in the layout at all, with no warning at save time beyond what's already specified. Worth a `mimi layout save` summary line noting how many fullscreen windows were skipped, for transparency (tracked as a task, not a spec requirement).
+- **Same-display-count setups can still drift** (e.g., user manually added a Space on one monitor since the last save) even though the coarse key (display count) still matches — this is exactly what the arrangement-mismatch confirmation step exists to catch.
+
+## Migration Plan
+
+Purely additive — no existing data, config schema, or command behavior changes. Nothing to migrate; rollback is simply not using the new `mimi layout` commands (or removing the persisted layout files under mimi's user-data directory).
+
+## Manual Test Plan
+
+Native SkyLight/AX/CGWindowList behavior can't be fully unit tested (no synthetic-display test seam, and permission-gated); real multi-display, multi-Space verification is manual. Steps, and results from running them against a real 4-display / 25-Space session during this change's implementation:
+
+1. **Grant permissions.** `mimi status` shows `accessibility: granted`; run any `mimi layout` command once without Screen Recording granted and confirm it reports `SCREEN_RECORDING_DENIED` with clear guidance rather than a raw/confusing error. — Verified: denied case produced the expected error and guidance; granting Screen Recording via System Settings and re-running succeeded.
+2. **Save across displays/Spaces.** Open windows for several apps spread across multiple Spaces on multiple displays (including at least one Space that is not currently displayed on any screen), then run `mimi layout save`. Confirm the summary's window count roughly matches what's actually open (allowing for legitimately excluded fullscreen/minimized windows). — Verified: captured 32 real windows across 4 displays and 25 distinct Spaces, including Spaces not currently displayed on any screen (proving the CGWindowList redesign reaches what AX could not).
+3. **Show / list.** Run `mimi layout show` and `mimi layout list`; confirm entries look correct (real bundle IDs, real titles, plausible logical Space numbers) and that `list` reflects the save timestamp and window count. — Verified.
+4. **Restore idempotence.** Immediately run `mimi layout restore` after a save with no intervening changes; confirm all entries report as moved (or plausibly skipped) with zero unexpected errors, and that re-running `mimi layout save` afterward produces an identical `spaceCounts`/ordinal assignment (only legitimately-changed data, like a browser tab title, should differ). — Verified: 32/32 moved, 0 skipped; re-saved layout was identical except for two window titles that had genuinely changed (tab navigation) in between.
+5. **Arrangement drift.** Simulate drift (e.g. add/remove a Space on one display, or reorder displays) between save and restore; confirm the mismatch warning appears with accurate saved-vs-current sequences, declining aborts with no windows moved, and confirming proceeds best-effort. — Not yet exercised against real hardware reconfiguration (requires physically changing the display/Space setup); the drift-detection and confirmation-prompt logic itself is unit tested (see Testing tasks) and manually exercised via the "no drift" path.
+6. **Missing app / missing layout.** Quit an app that has entries in a saved layout, then restore; confirm it's skipped and reported, not launched. Run `mimi layout restore` for a display count with no saved layout; confirm a clear "no saved layout" error and no changes.
+7. **Delete.** Run `mimi layout delete` for a display count and confirm it no longer appears in `mimi layout list`.
+
+## Open Questions
+
+- Exact on-disk JSON schema/versioning details for saved layout files — deferrable, doesn't change the spec or approach.
+- Exact CLI output formatting for `mimi layout list` / `show` (plain text vs. an optional `--json` flag) — deferrable.

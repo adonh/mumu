@@ -62,6 +62,22 @@ int MimiRequestAccessibilityPermissions(void) {
 	}
 }
 
+int MimiCheckScreenRecordingPermissions(void) {
+	// CGPreflightScreenCaptureAccess is a read-only check: it never prompts
+	// and has no side effects, unlike CGRequestScreenCaptureAccess below.
+	return CGPreflightScreenCaptureAccess() ? 1 : 0;
+}
+
+int MimiRequestScreenRecordingPermissions(void) {
+	@autoreleasepool {
+		// CGRequestScreenCaptureAccess prompts the system permission dialog
+		// the first time it's called for this app, and registers the app
+		// in System Settings > Privacy & Security > Screen Recording (even
+		// if the user declines) so it can be granted manually afterward.
+		return CGRequestScreenCaptureAccess() ? 1 : 0;
+	}
+}
+
 int MimiShowAccessibilityPermissionStartupAlert(void) {
 	return MimiRunOnMainThreadSync(^int {
 		@autoreleasepool {

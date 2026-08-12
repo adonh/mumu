@@ -225,6 +225,240 @@ uint32_t MimiSpaceDisplayID(uint64_t sid) {
 /// Get the space ID currently active on the cursor's display.
 uint64_t MimiActiveSpaceID(void) { return mimiDisplaySpaceID(mimiCursorDisplayID()); }
 
+#pragma mark - Logical (Left-to-Right) Space Numbering Helpers
+
+// Per-display entry used to sort SLSCopyManagedDisplaySpaces' raw array by
+// physical left-to-right position instead of its native primary-first order.
+typedef struct {
+	CFDictionaryRef displayRef;  // Borrowed; owned by the source displaySpaces array.
+	double originX;
+	double originY;
+	uint32_t displayID;
+} MimiDisplaySpacesEntry;
+
+static int mimiCompareDisplaySpacesEntries(const void *lhs, const void *rhs) {
+	const MimiDisplaySpacesEntry *entryA = (const MimiDisplaySpacesEntry *)lhs;
+	const MimiDisplaySpacesEntry *entryB = (const MimiDisplaySpacesEntry *)rhs;
+
+	if (entryA->originX != entryB->originX) {
+		return entryA->originX < entryB->originX ? -1 : 1;
+	}
+
+	if (entryA->originY != entryB->originY) {
+		return entryA->originY < entryB->originY ? -1 : 1;
+	}
+
+	if (entryA->displayID != entryB->displayID) {
+		return entryA->displayID < entryB->displayID ? -1 : 1;
+	}
+
+	return 0;
+}
+
+/// Returns SLSCopyManagedDisplaySpaces' display list re-sorted by physical
+/// left-to-right position (ties broken by y then display ID for
+/// determinism). Caller must CFRelease the result.
+static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
+	CFArrayRef displaySpaces = SLSCopyManagedDisplaySpaces(SLSMainConnectionID());
+	if (!displaySpaces) {
+		return NULL;
+	}
+
+	CFIndex displayCount = CFArrayGetCount(displaySpaces);
+	if (displayCount == 0) {
+		return displaySpaces;
+	}
+
+	MimiDisplaySpacesEntry *entries = calloc((size_t)displayCount, sizeof(MimiDisplaySpacesEntry));
+	if (!entries) {
+		CFRelease(displaySpaces);
+		return NULL;
+	}
+
+	for (CFIndex i = 0; i < displayCount; i++) {
+		CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(displaySpaces, i);
+		CFStringRef uuid = (CFStringRef)CFDictionaryGetValue(displayRef, CFSTR("Display Identifier"));
+		uint32_t did = uuid ? mimiDisplayIDFromUUID(uuid) : 0;
+		CGRect bounds = did ? CGDisplayBounds(did) : CGRectZero;
+		entries[i] = (MimiDisplaySpacesEntry){
+		    .displayRef = displayRef,
+		    .originX = bounds.origin.x,
+		    .originY = bounds.origin.y,
+		    .displayID = did,
+		};
+	}
+
+	qsort(entries, (size_t)displayCount, sizeof(MimiDisplaySpacesEntry), mimiCompareDisplaySpacesEntries);
+
+	CFMutableArrayRef sorted = CFArrayCreateMutable(NULL, displayCount, &kCFTypeArrayCallBacks);
+	if (sorted) {
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFArrayAppendValue(sorted, entries[i].displayRef);
+		}
+	}
+
+	free(entries);
+	CFRelease(displaySpaces);
+
+	return sorted;
+}
+
+#pragma mark - Public Logical (Left-to-Right) Space Numbering API
+
+/// Total number of Spaces, counted in logical left-to-right order.
+int MimiLogicalSpaceCount(void) {
+	@autoreleasepool {
+		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		if (!sorted) {
+			return 0;
+		}
+
+		int total = 0;
+		CFIndex displayCount = CFArrayGetCount(sorted);
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
+			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
+			if (spacesRef) {
+				total += (int)CFArrayGetCount(spacesRef);
+			}
+		}
+
+		CFRelease(sorted);
+
+		return total;
+	}
+}
+
+/// The macOS Space ID at the given 1-based logical left-to-right index.
+uint64_t MimiLogicalSpaceID(int logicalIndex) {
+	if (logicalIndex < 1) {
+		return 0;
+	}
+
+	@autoreleasepool {
+		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		if (!sorted) {
+			return 0;
+		}
+
+		uint64_t result = 0;
+		int counter = 1;
+
+		CFIndex displayCount = CFArrayGetCount(sorted);
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
+			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
+			if (!spacesRef) {
+				continue;
+			}
+
+			CFIndex spacesCount = CFArrayGetCount(spacesRef);
+			for (CFIndex j = 0; j < spacesCount; j++) {
+				if (counter == logicalIndex) {
+					CFDictionaryRef spaceRef = (CFDictionaryRef)CFArrayGetValueAtIndex(spacesRef, j);
+					CFNumberRef sidRef = (CFNumberRef)CFDictionaryGetValue(spaceRef, CFSTR("id64"));
+					if (sidRef) {
+						CFNumberGetValue(sidRef, CFNumberGetType(sidRef), &result);
+					}
+
+					CFRelease(sorted);
+
+					return result;
+				}
+
+				counter++;
+			}
+		}
+
+		CFRelease(sorted);
+
+		return 0;
+	}
+}
+
+/// The 1-based logical left-to-right index for a given macOS Space ID.
+int MimiLogicalIndexForSpace(uint64_t sid) {
+	@autoreleasepool {
+		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		if (!sorted) {
+			return 0;
+		}
+
+		int counter = 1;
+
+		CFIndex displayCount = CFArrayGetCount(sorted);
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
+			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
+			if (!spacesRef) {
+				continue;
+			}
+
+			CFIndex spacesCount = CFArrayGetCount(spacesRef);
+			for (CFIndex j = 0; j < spacesCount; j++) {
+				CFDictionaryRef spaceRef = (CFDictionaryRef)CFArrayGetValueAtIndex(spacesRef, j);
+				CFNumberRef sidRef = (CFNumberRef)CFDictionaryGetValue(spaceRef, CFSTR("id64"));
+
+				uint64_t curSid = 0;
+				if (sidRef) {
+					CFNumberGetValue(sidRef, CFNumberGetType(sidRef), &curSid);
+				}
+
+				if (curSid == sid) {
+					CFRelease(sorted);
+
+					return counter;
+				}
+
+				counter++;
+			}
+		}
+
+		CFRelease(sorted);
+
+		return 0;
+	}
+}
+
+/// Per-display Space-count sequence in left-to-right order.
+int *MimiLeftToRightSpaceCounts(int *outCount) {
+	if (!outCount) {
+		return NULL;
+	}
+
+	*outCount = 0;
+
+	@autoreleasepool {
+		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		if (!sorted) {
+			return NULL;
+		}
+
+		CFIndex displayCount = CFArrayGetCount(sorted);
+		if (displayCount == 0) {
+			CFRelease(sorted);
+			return NULL;
+		}
+
+		int *counts = (int *)malloc((size_t)displayCount * sizeof(int));
+		if (!counts) {
+			CFRelease(sorted);
+			return NULL;
+		}
+
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
+			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
+			counts[i] = spacesRef ? (int)CFArrayGetCount(spacesRef) : 0;
+		}
+
+		*outCount = (int)displayCount;
+		CFRelease(sorted);
+
+		return counts;
+	}
+}
+
 #pragma mark - Gesture-Based Space Focus
 
 // Private Core Graphics event field IDs used to synthesize a high-velocity
@@ -491,19 +725,17 @@ void MimiActivateDisplay(uint32_t did) { mimiSetActiveMenuBarDisplay(did); }
 - (instancetype)initWithWindows:(id)windows spaceID:(uint64_t)spaceID;
 @end
 
-int MimiMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
-	if (!windowElement) {
+/// Shared implementation for moving a window (identified by its raw
+/// CGWindowID) to a Mission Control space. Used by both MimiMoveWindowToSpace
+/// (which first resolves an AXUIElementRef to a CGWindowID) and
+/// MimiMoveWindowIDToSpace (which already has one, e.g. from
+/// MimiGetAllWindowsAcrossSpaces).
+static int mimiMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
+	if (windowId == 0) {
 		return 0;
 	}
 
 	mimiEnsureApplication();
-
-	CGWindowID windowId = 0;
-	AXError err = _AXUIElementGetWindow((AXUIElementRef)windowElement, &windowId);
-	if (err != kAXErrorSuccess || windowId == 0) {
-		MIMI_LOG("_AXUIElementGetWindow failed with error %d (windowId=%u)", (int)err, (unsigned)windowId);
-		return 0;
-	}
 
 	// Create CFArray of window ID
 	CFNumberRef windowNumber = CFNumberCreate(NULL, kCFNumberSInt32Type, &windowId);
@@ -561,4 +793,23 @@ int MimiMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
 	}
 
 	return success;
+}
+
+int MimiMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
+	if (!windowElement) {
+		return 0;
+	}
+
+	CGWindowID windowId = 0;
+	AXError err = _AXUIElementGetWindow((AXUIElementRef)windowElement, &windowId);
+	if (err != kAXErrorSuccess || windowId == 0) {
+		MIMI_LOG("_AXUIElementGetWindow failed with error %d (windowId=%u)", (int)err, (unsigned)windowId);
+		return 0;
+	}
+
+	return mimiMoveCGWindowIDToSpace(windowId, spaceID);
+}
+
+int MimiMoveWindowIDToSpace(uint32_t windowID, uint64_t spaceID) {
+	return mimiMoveCGWindowIDToSpace((CGWindowID)windowID, spaceID);
 }

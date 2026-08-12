@@ -38,6 +38,12 @@ const (
 type CheckResult struct {
 	Accessibility    bool
 	AccessibilityMsg string
+
+	// ScreenRecording and ScreenRecordingMsg are only populated by
+	// CheckLayout; Check leaves them zero-valued since only the layout
+	// save/restore capability requires Screen Recording.
+	ScreenRecording    bool
+	ScreenRecordingMsg string
 }
 
 // Check verifies macOS accessibility permissions.
@@ -59,9 +65,41 @@ func Check() CheckResult {
 	return res
 }
 
+// CheckLayout verifies the permissions required by the layout save/restore
+// capability ("mimi layout ..."): Accessibility (for window/space control,
+// same as Check) plus Screen Recording. Screen Recording is required
+// because window titles (used to match windows across Mission Control
+// Spaces) come from CGWindowListCopyWindowInfo, which redacts them to empty
+// system-wide unless the process holds that permission.
+func CheckLayout() CheckResult {
+	res := Check()
+
+	trusted := C.MimiCheckScreenRecordingPermissions() != 0
+	res.ScreenRecording = trusted
+	if !trusted {
+		res.ScreenRecordingMsg = `Screen Recording permission is required for "mimi layout" commands.
+
+  Grant it in:
+    System Settings -> Privacy & Security -> Screen Recording -> enable "mimi"
+
+  After granting, restart mimi (or re-run the layout command).
+  Without it, window titles can't be read for windows outside the
+  currently displayed Space, which layout save/restore needs to reliably
+  match windows.`
+	}
+
+	return res
+}
+
 // RequestAccessibility asks macOS to start the accessibility permission flow.
 func RequestAccessibility() bool {
 	return C.MimiRequestAccessibilityPermissions() != 0
+}
+
+// RequestScreenRecording asks macOS to start the Screen Recording
+// permission flow (used only by the layout save/restore capability).
+func RequestScreenRecording() bool {
+	return C.MimiRequestScreenRecordingPermissions() != 0
 }
 
 // ShowConfigOnboardingAlert displays startup guidance for creating the first config file.
@@ -84,4 +122,19 @@ func FriendlyError(r CheckResult) error {
 	}
 
 	return derrors.New(derrors.CodeAccessibilityDenied, r.AccessibilityMsg)
+}
+
+// FriendlyErrorLayout returns an error if either permission required by the
+// layout save/restore capability (Accessibility, Screen Recording) is
+// denied.
+func FriendlyErrorLayout(result CheckResult) error {
+	if !result.Accessibility {
+		return derrors.New(derrors.CodeAccessibilityDenied, result.AccessibilityMsg)
+	}
+
+	if !result.ScreenRecording {
+		return derrors.New(derrors.CodeScreenRecordingDenied, result.ScreenRecordingMsg)
+	}
+
+	return nil
 }

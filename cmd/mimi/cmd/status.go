@@ -31,11 +31,17 @@ var statusCmd = &cobra.Command{
 			}
 		}
 
-		perm := permissions.Check()
+		perm := permissions.CheckLayout()
 		if perm.Accessibility {
 			cmd.Println("accessibility: granted")
 		} else {
 			cmd.Println("accessibility: not granted (required for window hooks and actions)")
+		}
+
+		if perm.ScreenRecording {
+			cmd.Println("screen recording: granted")
+		} else {
+			cmd.Println("screen recording: not granted (required for 'mimi layout' only)")
 		}
 
 		_, statErr := os.Stat(paths.ExpandHome(socketPath))

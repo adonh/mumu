@@ -40,6 +40,8 @@ brew install --cask y3owk1n/tap/mimi
 
 Grant **Accessibility** in **System Settings → Privacy & Security → Accessibility**, then start using it immediately. No daemon required.
 
+`mimi layout` (save/restore window-to-space layouts) additionally needs **Screen Recording** — see [Save & restore layouts](#save--restore-layouts).
+
 Other options (Nix flake, build from source) → [Installation Guide](docs/INSTALLATION.md)
 
 ---
@@ -88,6 +90,24 @@ shift + alt - f : mimi action focus_window
 **[Alfred](https://www.alfredapp.com/)** — wire up a Shell Script workflow step, same idea.
 
 **Karabiner, Hammerspoon, BetterTouchTool** — if it can run a shell command on a keypress, mimi works with it.
+
+---
+
+## Save & restore layouts
+
+Reconnect your monitors and get every window back on the space it was on — without relaunching anything.
+
+```bash
+mimi layout save        # remember what's where, for this display setup
+mimi layout restore     # put matching, already-open windows back
+mimi layout list         # see what's saved
+```
+
+Layouts are keyed by display count, so plugging in (or unplugging) a monitor automatically finds the right saved arrangement. Restore only ever moves windows belonging to apps that are already running — it never launches anything, and never creates or deletes spaces. Space numbers count left to right across all your displays, matching how you actually see them laid out, regardless of which display macOS considers "primary."
+
+Needs **Screen Recording** permission (in addition to Accessibility) to read window titles reliably — grant it in **System Settings → Privacy & Security → Screen Recording**.
+
+Full reference → [CLI Guide](docs/CLI.md#layout-saverestore)
 
 ---
 

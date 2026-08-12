@@ -1,0 +1,36 @@
+package layout
+
+import "time"
+
+// SchemaVersion is the current on-disk layout schema version.
+const SchemaVersion = 1
+
+// Entry represents a single window's saved space assignment.
+type Entry struct {
+	// BundleID is the owning application's bundle identifier.
+	BundleID string `json:"bundleId"`
+	// Title is the window's title at save time, used for restore matching.
+	Title string `json:"title"`
+	// Index is the window's 0-based position among its application's other
+	// captured (non-fullscreen) windows, in save-time enumeration order.
+	// Used as the restore-time matching fallback when title matching is
+	// ambiguous or unavailable.
+	Index int `json:"index"`
+	// Ordinal is the window's logical left-to-right Mission Control space
+	// number (see internal/space's logical numbering), independent of which
+	// display is primary.
+	Ordinal int `json:"ordinal"`
+}
+
+// Layout is a saved window-to-space arrangement for a specific display count.
+type Layout struct {
+	SchemaVersion int `json:"schemaVersion"`
+	// DisplayCount is the number of connected displays this layout was
+	// captured for, and the key layouts are looked up by.
+	DisplayCount int `json:"displayCount"`
+	// SpaceCounts is the per-display space-count sequence, left to right,
+	// recorded at save time. Used to detect arrangement drift at restore.
+	SpaceCounts []int     `json:"spaceCounts"`
+	Entries     []Entry   `json:"entries"`
+	SavedAt     time.Time `json:"savedAt"`
+}

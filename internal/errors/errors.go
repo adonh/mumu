@@ -16,6 +16,10 @@ const (
 	// CodeAccessibilityFailed indicates an accessibility API call failed.
 	CodeAccessibilityFailed Code = "ACCESSIBILITY_FAILED"
 
+	// CodeScreenRecordingDenied indicates Screen Recording permission is
+	// not granted (required by the layout save/restore capability).
+	CodeScreenRecordingDenied Code = "SCREEN_RECORDING_DENIED"
+
 	// CodeInvalidConfig indicates configuration validation failed.
 	CodeInvalidConfig Code = "INVALID_CONFIG"
 

@@ -21,6 +21,7 @@ This guide covers installation methods for Mimi on macOS.
 
 - macOS 14.0 or later
 - Accessibility permissions (granted during setup)
+- Screen Recording permissions (only if you plan to use `mimi layout`)
 
 ---
 
@@ -372,6 +373,8 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed build options.
 ### 1. Grant Permissions
 
 **Required:** Open System Settings → Privacy & Security → Accessibility → Add Mimi
+
+**Required for `mimi layout` only:** Open System Settings → Privacy & Security → Screen Recording → Add Mimi. This lets layout save/restore read window titles reliably; no other mimi command needs it. Check either permission's status anytime with `mimi status`.
 
 You are done if you just want to use it as CLI. If you want the full experience with daemon, continue the following steps.
 

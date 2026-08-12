@@ -81,6 +81,27 @@ func (e *Element) Activate() error {
 	return nil
 }
 
+// MoveToSpace moves this window to the Mission Control space with the given
+// macOS space ID, without altering its position or size. Unlike the
+// frontmost-window move used by "mimi action move_window_to_space", this
+// deliberately does not activate the target display, since layout restore
+// may move many windows across many displays in one pass.
+func (e *Element) MoveToSpace(spaceID uint64) error {
+	if e.ref == nil {
+		return derrors.New(
+			derrors.CodeAccessibilityFailed,
+			"cannot move window: element reference is nil",
+		)
+	}
+
+	result := C.MimiMoveWindowToSpace(e.ref, C.uint64_t(spaceID)) //nolint:nlreturn
+	if result == 0 {
+		return derrors.New(derrors.CodeActionFailed, "failed to move window to space")
+	}
+
+	return nil
+}
+
 // Release releases the element reference.
 func (e *Element) Release() {
 	if e.ref != nil {

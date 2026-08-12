@@ -34,3 +34,10 @@ cat /tmp/mimi.err.log    # if using Nix module
 ## Permission prompt keeps appearing
 
 Remove and re-add mimi in System Settings → Privacy & Security → Accessibility. Ensure you're granting the binary you actually execute (Homebrew cask path vs local `bin/mimi`).
+
+## `mimi layout` reports Screen Recording denied after granting it
+
+1. Confirm with `mimi status` — it reports both Accessibility and Screen Recording separately
+2. Make sure you granted the exact binary you run, same as Accessibility above
+3. If you just rebuilt mimi (e.g. from source) after granting, macOS's permission cache (TCC) can take a few seconds to pick up the change even though the toggle shows enabled — re-run the command once more before assuming it's broken
+4. Window titles (used for restore matching) come back empty without this permission even when Accessibility is granted — the two permissions are independent

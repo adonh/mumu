@@ -24,7 +24,8 @@ var RootCmd = &cobra.Command{
 	Long: `mimi provides macOS-native window and space management without disabling SIP.
 
 Use "mimi action" for immediate commands (focus window, switch space, move window).
-Use "mimi start" to run the background daemon and react to window/space events via hooks.`,
+Use "mimi start" to run the background daemon and react to window/space events via hooks.
+Use "mimi layout" to save and restore window-to-space layouts across display configurations.`,
 }
 
 // Execute runs the root command and returns any error.
@@ -54,4 +55,5 @@ func init() {
 	RootCmd.AddCommand(configCmd)
 	RootCmd.AddCommand(servicesCmd)
 	RootCmd.AddCommand(actionCmd)
+	RootCmd.AddCommand(layoutCmd)
 }
