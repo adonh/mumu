@@ -61,8 +61,12 @@ type moveTarget struct {
 // matching, currently open window belonging to an already-running
 // application and moves it to the space corresponding to the entry's
 // logical ordinal. Applications that are not currently running are skipped
-// and never launched. Restore never creates or removes spaces; entries
-// whose target space no longer exists are skipped and reported.
+// and never launched. If an application now has exactly one window left
+// unclaimed, an otherwise-unmatched entry for it is matched to that window
+// regardless of title or saved position (see matchWindowIndex), since
+// there's no real ambiguity about which window it refers to. Restore never
+// creates or removes spaces; entries whose target space no longer exists
+// are skipped and reported.
 //
 // Callers are responsible for any arrangement-drift confirmation prompt
 // (see DetectDrift) before calling Restore.
@@ -167,10 +171,15 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 }
 
 // matchWindowIndex resolves a saved entry to the index of a currently open
-// window within the same application's live window list. It first attempts
-// an exact, unambiguous title match; if none exists, it falls back to the
-// entry's saved positional index within the same application. Returns -1 if
-// no candidate is available.
+// window within the same application's live window list. It tries, in
+// order: (1) an exact, unambiguous title match; (2) the entry's saved
+// positional index, if still available; (3) whether exactly one of the
+// app's windows remains unclaimed, in which case there is no real
+// ambiguity about which window this entry refers to regardless of title or
+// saved position. The third tier matters for apps like browsers, whose
+// window title reflects page content and rarely matches across save and
+// restore, and for apps that had multiple windows saved but now have only
+// one open. Returns -1 if no candidate is available.
 func matchWindowIndex(entry Entry, live []window.AcrossSpacesEntry, used map[int]bool) int {
 	if entry.Title != "" {
 		matchIdx := -1
@@ -199,7 +208,27 @@ func matchWindowIndex(entry Entry, live []window.AcrossSpacesEntry, used map[int
 		return entry.Index
 	}
 
-	return -1
+	return soleRemainingCandidate(live, used)
+}
+
+// soleRemainingCandidate returns the index of the only not-yet-claimed
+// window in live, or -1 if zero or more than one remain unclaimed.
+func soleRemainingCandidate(live []window.AcrossSpacesEntry, used map[int]bool) int {
+	sole := -1
+
+	for candidateIdx := range live {
+		if used[candidateIdx] {
+			continue
+		}
+
+		if sole >= 0 {
+			return -1
+		}
+
+		sole = candidateIdx
+	}
+
+	return sole
 }
 
 func intSlicesEqual(left, right []int) bool {

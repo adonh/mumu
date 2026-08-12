@@ -170,7 +170,7 @@ Captures, for every non-fullscreen window on every space across all connected di
 
 ### `mimi layout restore [--yes]`
 
-Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app. Never creates or removes spaces — entries whose target space no longer exists are skipped and reported.
+Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. Never creates or removes spaces — entries whose target space no longer exists are skipped and reported.
 
 If the current per-display space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
 

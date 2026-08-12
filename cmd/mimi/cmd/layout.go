@@ -107,9 +107,12 @@ displays.
 
 Only already-running applications are affected: apps that aren't running
 are skipped, never launched. Windows are matched to saved entries by exact
-title first, falling back to positional order within the same app. Restore
-never creates or removes Spaces; entries whose saved Space no longer exists
-are skipped and reported.
+title first, falling back to positional order within the same app; if
+exactly one of an app's windows remains unmatched, it's used regardless of
+title or position, since there's no real ambiguity left (this matters for
+apps like browsers, whose titles rarely match exactly). Restore never
+creates or removes Spaces; entries whose saved Space no longer exists are
+skipped and reported.
 
 If the current per-display Space-count arrangement has changed since the
 layout was saved, you'll be asked to confirm before any windows are moved.
