@@ -153,9 +153,8 @@ in a single-line summary, or as JSON with the --json flag.`,
 			}
 			cmd.Println(string(bytes))
 		} else {
-			cmd.Printf("%d display(s): %d window(s), saved %s\n",
+			cmd.Printf("%d display saved %s\n",
 				saved.DisplayCount,
-				len(saved.Entries),
 				saved.SavedAt.Format(time.RFC3339),
 			)
 		}
