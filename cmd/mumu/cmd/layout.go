@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -16,8 +17,9 @@ import (
 var restoreAssumeYes bool
 
 var (
-	showSort    string
-	restoreSort string
+	showSort       string
+	restoreSort    string
+	layoutJSONFlag bool
 )
 
 var layoutSaveCmd = &cobra.Command{
@@ -114,6 +116,49 @@ Use --yes to skip the prompt.`,
 		}
 
 		printRestoreSummary(cmd, summary, sortKey)
+
+		return nil
+	},
+}
+
+var layoutLayoutCmd = &cobra.Command{
+	Use:   "layout",
+	Short: "Show the current saved layout for connected displays",
+	Long: `Display the saved layout for the current number of connected displays
+in a single-line summary, or as JSON with the --json flag.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		displayCount, err := currentDisplayCount()
+		if err != nil {
+			return err
+		}
+
+		saved, err := layout.Load(displayCount)
+		if err != nil {
+			return err
+		}
+
+		if layoutJSONFlag {
+			data := struct {
+				DisplayCount int       `json:"display_count"`
+				WindowCount  int       `json:"window_count"`
+				SavedAt      time.Time `json:"saved_at"`
+			}{
+				DisplayCount: saved.DisplayCount,
+				WindowCount:  len(saved.Entries),
+				SavedAt:      saved.SavedAt,
+			}
+			bytes, err := json.MarshalIndent(data, "", "  ")
+			if err != nil {
+				return derrors.Wrapf(err, derrors.CodeSerializationFailed, "encoding layout to JSON")
+			}
+			cmd.Println(string(bytes))
+		} else {
+			cmd.Printf("%d display(s): %d window(s), saved %s\n",
+				saved.DisplayCount,
+				len(saved.Entries),
+				saved.SavedAt.Format(time.RFC3339),
+			)
+		}
 
 		return nil
 	},
@@ -344,8 +389,12 @@ func init() {
 	addSortFlag(layoutShowCmd, &showSort)
 	addSortFlag(layoutRestoreCmd, &restoreSort)
 
+	layoutLayoutCmd.Flags().
+		BoolVar(&layoutJSONFlag, "json", false, "Output as JSON instead of a single-line summary")
+
 	RootCmd.AddCommand(layoutSaveCmd)
 	RootCmd.AddCommand(layoutRestoreCmd)
+	RootCmd.AddCommand(layoutLayoutCmd)
 	RootCmd.AddCommand(layoutListCmd)
 	RootCmd.AddCommand(layoutShowCmd)
 	RootCmd.AddCommand(layoutDeleteCmd)
