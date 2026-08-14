@@ -27,6 +27,7 @@
 extern int SLSMainConnectionID(void);
 extern CFArrayRef SLSCopyManagedDisplaySpaces(int cid);
 extern CFStringRef SLSCopyManagedDisplayForSpace(int cid, uint64_t sid);
+extern CFStringRef SLSCopyActiveMenuBarDisplayIdentifier(int cid);
 extern uint64_t SLSManagedDisplayGetCurrentSpace(int cid, CFStringRef uuid);
 extern CGError SLSSetActiveMenuBarDisplayIdentifier(int cid, CFStringRef uuid, CFStringRef repeat_uuid);
 extern CGError SLSGetCurrentCursorLocation(int cid, CGPoint *point);
@@ -78,6 +79,24 @@ static uint32_t mumuDisplayIDFromUUID(CFStringRef uuid) {
 
 	uint32_t did = CGDisplayGetDisplayIDFromUUID(uuidRef);
 	CFRelease(uuidRef);
+
+	return did;
+}
+
+/// Return the display that currently owns the active menu bar.
+/// Falls back to the CoreGraphics main display when SkyLight cannot resolve it.
+static uint32_t mumuMenuBarDisplayID(void) {
+	CFStringRef uuid = SLSCopyActiveMenuBarDisplayIdentifier(SLSMainConnectionID());
+	if (!uuid) {
+		return CGMainDisplayID();
+	}
+
+	uint32_t did = mumuDisplayIDFromUUID(uuid);
+	CFRelease(uuid);
+
+	if (did == 0) {
+		return CGMainDisplayID();
+	}
 
 	return did;
 }
@@ -269,6 +288,9 @@ uint32_t MumuSpaceDisplayID(uint64_t sid) {
 
 /// Get the space ID currently active on the cursor's display.
 uint64_t MumuActiveSpaceID(void) { return mumuDisplaySpaceID(mumuCursorDisplayID()); }
+
+/// Get the space ID currently active on the display that owns the menu bar.
+uint64_t MumuMenuBarDisplaySpaceID(void) { return mumuDisplaySpaceID(mumuMenuBarDisplayID()); }
 
 #pragma mark - Logical (Left-to-Right) Space Numbering Helpers
 

@@ -103,3 +103,13 @@ func SortEntries(entries []Entry, key SortKey) {
 		return entryLess(entries[i], entries[j], key, mcOrdinal)
 	})
 }
+
+// SortSkippedEntries sorts skipped entries in place according to key while
+// retaining their restore metadata.
+func SortSkippedEntries(entries []SkippedEntry, key SortKey) {
+	mcOrdinal := newMissionControlOrdinalLookup()
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entryLess(entries[i].Entry, entries[j].Entry, key, mcOrdinal)
+	})
+}

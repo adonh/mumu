@@ -44,6 +44,7 @@ int MumuMissionControlIndexForSpace(uint64_t sid);
 
 uint32_t MumuSpaceDisplayID(uint64_t sid);
 uint64_t MumuActiveSpaceID(void);
+uint64_t MumuMenuBarDisplaySpaceID(void);
 int MumuFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid);
 int MumuMoveWindowToSpace(void *windowElement, uint64_t spaceID);
 

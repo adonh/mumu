@@ -56,7 +56,7 @@ mumu save
 
 ## `mumu restore [--yes] [--sort display|macos|app]`
 
-Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
+Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. After those matching steps, remaining open windows from an app with a valid assignment move to that app's most prevalent target Space. If its target Spaces are tied, they move to the Space currently shown on the primary (menu-bar) display, so they are immediately visible; apps with no valid assignment are left unchanged. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
 
 If the current per-display Space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
 
@@ -66,7 +66,7 @@ mumu restore --yes
 mumu restore --sort macos
 ```
 
-Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (target Space — both numbers, see [Space Numbering](#space-numbering) — then bundle ID and title) so it's never a silent pause. Windows are moved, and progress lines printed, in the order set by `--sort` (default: display-sequence order). Afterward, any skipped entries are listed grouped by reason — each group also ordered by `--sort` — each showing the bundle ID, title, and saved Space, including the specific windows that couldn't be matched to a currently open window.
+Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (target Space — both numbers, see [Space Numbering](#space-numbering) — then bundle ID and title) so it's never a silent pause. Fallback placements are marked `(fallback)` in progress output and failure summaries. Windows are moved, and progress lines printed, in the order set by `--sort` (default: display-sequence order). Afterward, any skipped entries are listed grouped by reason — each group also ordered by `--sort` — each showing the bundle ID, title, and saved Space, including the specific windows that couldn't be matched to a currently open window.
 
 ## `mumu list`
 
