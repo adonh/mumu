@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 )
 
 var restoreAssumeYes bool
+var deleteAssumeYes bool
 
 var (
 	showSort       string
@@ -264,12 +266,26 @@ var layoutDeleteCmd = &cobra.Command{
 	Long: `Delete the saved layout for the given display count.
 
 If display-count is omitted, deletes the layout for the current number of
-connected displays.`,
+connected displays.
+
+You'll be asked to confirm before the layout is deleted. Use --yes to skip
+the prompt.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		displayCount, err := resolveDisplayCountArg(args)
 		if err != nil {
 			return err
+		}
+
+		if _, err := layout.Load(displayCount); err != nil {
+			return err
+		}
+
+		if !deleteAssumeYes &&
+			!promptConfirm(cmd, fmt.Sprintf("Delete saved layout for %d display(s)?", displayCount)) {
+			cmd.Println("Delete aborted; no saved layout was removed.")
+
+			return nil
 		}
 
 		err = layout.Delete(displayCount)
@@ -406,6 +422,8 @@ func addSortFlag(cmd *cobra.Command, dest *string) {
 func init() {
 	layoutRestoreCmd.Flags().
 		BoolVarP(&restoreAssumeYes, "yes", "y", false, "Skip the arrangement-mismatch confirmation prompt")
+	layoutDeleteCmd.Flags().
+		BoolVarP(&deleteAssumeYes, "yes", "y", false, "Skip the delete confirmation prompt")
 
 	addSortFlag(layoutShowCmd, &showSort)
 	addSortFlag(layoutRestoreCmd, &restoreSort)
