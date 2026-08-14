@@ -90,6 +90,34 @@ func ActiveIndex() (int, error) {
 	return 0, derrors.New(derrors.CodeActionFailed, "active space not found in space enumeration")
 }
 
+// MenuBarActiveLogicalIndex returns the logical left-to-right index of the
+// Space currently shown on the display that owns the menu bar.
+func MenuBarActiveLogicalIndex() (int, error) {
+	return menuBarDisplayLogicalIndex(
+		uint64(C.MumuMenuBarDisplaySpaceID()),
+		LogicalIndexForSpace,
+	)
+}
+
+func menuBarDisplayLogicalIndex(spaceID uint64, indexForSpace func(uint64) int) (int, error) {
+	if spaceID == 0 {
+		return 0, derrors.New(
+			derrors.CodeActionFailed,
+			"failed to resolve the menu-bar display's current space",
+		)
+	}
+
+	logicalIndex := indexForSpace(spaceID)
+	if logicalIndex == 0 {
+		return 0, derrors.New(
+			derrors.CodeActionFailed,
+			"menu-bar display's current space is not in the logical space ordering",
+		)
+	}
+
+	return logicalIndex, nil
+}
+
 // MoveWindow moves the frontmost window to the space at the given 1-based index.
 func MoveWindow(index int) error {
 	count := int(C.MumuCountMissionControlSpaces())

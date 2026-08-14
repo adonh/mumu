@@ -73,9 +73,11 @@ are skipped, never launched. Windows are matched to saved entries by exact
 title first, falling back to positional order within the same app; if
 exactly one of an app's windows remains unmatched, it's used regardless of
 title or position, since there's no real ambiguity left (this matters for
-apps like browsers, whose titles rarely match exactly). Restore never
-creates or removes Spaces; entries whose saved Space no longer exists are
-skipped and reported.
+apps like browsers, whose titles rarely match exactly). Other open windows
+of an app are placed in its most prevalent matched Space; tied targets use
+the Space currently shown on the primary (menu-bar) display. Apps without a
+matching assignment are left unchanged. Restore never creates or removes
+Spaces; entries whose saved Space no longer exists are skipped and reported.
 
 If the current per-display Space-count arrangement has changed since the
 layout was saved, you'll be asked to confirm before any windows are moved.
@@ -139,18 +141,24 @@ in a single-line summary, or as JSON with the --json flag.`,
 
 		if layoutJSONFlag {
 			data := struct {
-				DisplayCount int       `json:"display_count"`
-				WindowCount  int       `json:"window_count"`
-				SavedAt      time.Time `json:"saved_at"`
+				DisplayCount int       `json:"display_count"` //nolint:tagliatelle // Stable CLI JSON field name.
+				WindowCount  int       `json:"window_count"`  //nolint:tagliatelle // Stable CLI JSON field name.
+				SavedAt      time.Time `json:"saved_at"`      //nolint:tagliatelle // Stable CLI JSON field name.
 			}{
 				DisplayCount: saved.DisplayCount,
 				WindowCount:  len(saved.Entries),
 				SavedAt:      saved.SavedAt,
 			}
+
 			bytes, err := json.MarshalIndent(data, "", "  ")
 			if err != nil {
-				return derrors.Wrapf(err, derrors.CodeSerializationFailed, "encoding layout to JSON")
+				return derrors.Wrapf(
+					err,
+					derrors.CodeSerializationFailed,
+					"encoding layout to JSON",
+				)
 			}
+
 			cmd.Println(string(bytes))
 		} else {
 			cmd.Printf("%d display saved %s\n",
@@ -335,9 +343,9 @@ func printRestoreSummary(
 		return
 	}
 
-	byReason := map[layout.SkipReason][]layout.Entry{}
+	byReason := map[layout.SkipReason][]layout.SkippedEntry{}
 	for _, s := range summary.Skipped {
-		byReason[s.Reason] = append(byReason[s.Reason], s.Entry)
+		byReason[s.Reason] = append(byReason[s.Reason], s)
 	}
 
 	cmd.Printf("Skipped %d entry(ies):\n", len(summary.Skipped))
@@ -346,23 +354,31 @@ func printRestoreSummary(
 		layout.SkipAppNotRunning,
 		layout.SkipUnmatchedWindow,
 		layout.SkipOrdinalOutOfRange,
+		layout.SkipFallbackTargetUnavailable,
 		layout.SkipMoveFailed,
 	} {
-		entries := byReason[reason]
-		if len(entries) == 0 {
+		skippedEntries := byReason[reason]
+		if len(skippedEntries) == 0 {
 			continue
 		}
 
-		layout.SortEntries(entries, sortKey)
+		layout.SortSkippedEntries(skippedEntries, sortKey)
 
-		cmd.Printf("  %s (%d):\n", reason, len(entries))
+		cmd.Printf("  %s (%d):\n", reason, len(skippedEntries))
 
-		for _, entry := range entries {
+		for _, skipped := range skippedEntries {
+			fallbackMarker := ""
+			if skipped.Fallback {
+				fallbackMarker = " (fallback)"
+			}
+
+			entry := skipped.Entry
 			cmd.Printf(
-				"    - %s — %q (%s)\n",
+				"    - %s — %q (%s)%s\n",
 				entry.BundleID,
 				displayTitle(entry.Title),
 				space.DualLabel(entry.Ordinal),
+				fallbackMarker,
 			)
 		}
 	}
