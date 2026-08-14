@@ -69,12 +69,14 @@ var layoutRestoreCmd = &cobra.Command{
 "mumu save", auto-detected by the number of currently connected displays.
 
 Only already-running applications are affected: apps that aren't running
-are skipped, never launched. Windows are matched to saved entries by exact
-title first, falling back to positional order within the same app; if
-exactly one of an app's windows remains unmatched, it's used regardless of
-title or position, since there's no real ambiguity left (this matters for
-apps like browsers, whose titles rarely match exactly). Other open windows
-of an app are placed in its most prevalent matched Space; tied targets use
+are skipped, never launched. For each app, its saved entries and open
+windows are matched as a batch by title similarity — shared words, ignoring
+case and word order — assigning the closest-matching pairs first so no
+window is ever claimed by more than one saved entry; an entry goes
+unmatched only once its app has no open window left to claim. Matches
+that aren't exact are marked "(fuzzy)" in output (this matters for apps
+like browsers, whose titles rarely match exactly). Other open windows of
+an app are placed in its most prevalent matched Space; tied targets use
 the Space currently shown on the primary (menu-bar) display. Apps without a
 matching assignment are left unchanged. Restore never creates or removes
 Spaces; entries whose saved Space no longer exists are skipped and reported.
@@ -367,9 +369,13 @@ func printRestoreSummary(
 		cmd.Printf("  %s (%d):\n", reason, len(skippedEntries))
 
 		for _, skipped := range skippedEntries {
-			fallbackMarker := ""
+			marker := ""
 			if skipped.Fallback {
-				fallbackMarker = " (fallback)"
+				marker += " (fallback)"
+			}
+
+			if skipped.Fuzzy {
+				marker += " (fuzzy)"
 			}
 
 			entry := skipped.Entry
@@ -378,7 +384,7 @@ func printRestoreSummary(
 				entry.BundleID,
 				displayTitle(entry.Title),
 				space.DualLabel(entry.Ordinal),
-				fallbackMarker,
+				marker,
 			)
 		}
 	}

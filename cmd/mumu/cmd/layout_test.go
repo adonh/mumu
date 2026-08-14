@@ -40,3 +40,34 @@ func TestPrintRestoreSummaryMarksFallbackFailures(t *testing.T) {
 		t.Fatalf("restore summary = %q, want fallback marker", output.String())
 	}
 }
+
+func TestPrintRestoreSummaryMarksFuzzyMatches(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printRestoreSummary(
+		cmd,
+		layout.RestoreSummary{
+			Skipped: []layout.SkippedEntry{
+				{
+					Entry: layout.Entry{
+						BundleID: "com.example.chrome",
+						Title:    "window",
+						Ordinal:  1,
+					},
+					Reason: layout.SkipMoveFailed,
+					Fuzzy:  true,
+				},
+			},
+		},
+		layout.SortByDisplay,
+	)
+
+	if !strings.Contains(output.String(), "(fuzzy)") {
+		t.Fatalf("restore summary = %q, want fuzzy marker", output.String())
+	}
+}
