@@ -48,7 +48,7 @@ runs:
     - shell: bash
       run: |
         codesign --force --deep --sign "${{ inputs.developer-id-identity }}" \
-          --entitlements resources/Mimi.entitlements \
+          --entitlements resources/Mumu.entitlements \
           --options runtime \
           "${{ inputs.app-path }}"
 

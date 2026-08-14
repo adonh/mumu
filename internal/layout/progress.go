@@ -1,5 +1,10 @@
 package layout
 
+import (
+	"fmt"
+	"strconv"
+)
+
 // ProgressFunc receives human-readable status updates during long-running
 // operations (Capture, Restore) so callers like the CLI can print
 // something while native window enumeration and window moves are in
@@ -22,4 +27,13 @@ func displayTitle(title string) string {
 	}
 
 	return title
+}
+
+// FormatIndex renders a 1-based progress index like "[03/12]", with both
+// numbers zero-padded to the digit width of total so entries line up
+// vertically in a list regardless of how many digits total itself has.
+func FormatIndex(current, total int) string {
+	width := len(strconv.Itoa(total))
+
+	return fmt.Sprintf("[%0*d/%0*d]", width, current, width, total)
 }

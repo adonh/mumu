@@ -1,43 +1,26 @@
 # Troubleshooting
 
-## `mimi action space` or `move_window_to_space` does nothing
+## `mumu save`/`restore` fails or refuses to run
 
-1. **Rebuild** after updates — native run-loop pumping is required for CLI actions
-2. **Grant Accessibility** to the exact binary you run (`bin/mimi` or `Mimi.app`)
-3. **Check space index** — spaces are 1-based in Mission Control order (`mimi action space 1` is the first space)
-4. **Close Mission Control** — actions refuse to run while Mission Control is open
+1. Run `mumu status` — confirm both Accessibility and Screen Recording are granted.
+2. Make sure you granted permission to the exact binary you run (Homebrew cask path vs. a locally built `bin/mumu`) — granting one doesn't carry over to the other.
+3. If you just rebuilt `mumu` (e.g. from source) after granting, macOS's permission cache (TCC) can take a few seconds to catch up even though the toggle shows enabled — re-run the command once more before assuming it's broken.
 
-## Window hooks not firing
+## Permission prompt keeps reappearing
 
-1. Run `mimi status` — confirm daemon is running and Accessibility is granted
-2. Run `mimi config validate` — confirm hooks are defined
-3. Set `log_level = "debug"` in config and check logs
-4. Window hooks require Accessibility; workspace hooks do not
+Remove and re-add `mumu` in **System Settings → Privacy & Security → Accessibility** (and **Screen Recording**). Ensure you're granting the binary you actually execute.
 
-## Daemon won't start
+## `mumu restore` reports Screen Recording denied after granting it
 
-```bash
-mimi config validate
-mimi status          # check for stale PID file
-rm ~/.local/share/mimi/mimi.pid
-mimi start
-```
+1. Confirm with `mumu status` — it reports Accessibility and Screen Recording separately.
+2. Window titles (used for restore matching) come back empty without Screen Recording even when Accessibility is granted — the two permissions are independent, and both are required.
 
-## launchd service issues
+## Restore skips windows I expect it to move
 
-```bash
-mimi services status
-launchctl list | grep mimi
-cat /tmp/mimi.err.log    # if using Nix module
-```
+- **App isn't running**: restore never launches apps — only windows belonging to already-running applications are moved. Start the app first, then restore again.
+- **Target Space no longer exists**: restore never creates Spaces. If you removed a Space since saving, entries for it are skipped and listed in the post-restore summary.
+- **Ambiguous title match**: if an app has multiple windows with the same (or blank) title, `mumu` falls back to positional matching; if more than one candidate remains ambiguous, the extras are skipped rather than guessed. Check the skip summary printed after restore for the specific bundle ID and title.
 
-## Permission prompt keeps appearing
+## Display count mismatch prompt
 
-Remove and re-add mimi in System Settings → Privacy & Security → Accessibility. Ensure you're granting the binary you actually execute (Homebrew cask path vs local `bin/mimi`).
-
-## `mimi layout` reports Screen Recording denied after granting it
-
-1. Confirm with `mimi status` — it reports both Accessibility and Screen Recording separately
-2. Make sure you granted the exact binary you run, same as Accessibility above
-3. If you just rebuilt mimi (e.g. from source) after granting, macOS's permission cache (TCC) can take a few seconds to pick up the change even though the toggle shows enabled — re-run the command once more before assuming it's broken
-4. Window titles (used for restore matching) come back empty without this permission even when Accessibility is granted — the two permissions are independent
+If restore detects your current display setup has a different Space count than what was saved, it asks for confirmation before moving anything (since a saved Space number may not map to what you expect on a different arrangement). Use `mumu restore --yes` to skip this prompt, or run `mumu save` again to capture a fresh layout for the current setup.

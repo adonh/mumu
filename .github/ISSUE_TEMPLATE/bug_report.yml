@@ -6,7 +6,7 @@ body:
       attributes:
           value: |
               Thanks for taking the time to report a bug!
-              Please check [existing issues](https://github.com/y3owk1n/mimi/issues?q=is%3Aissue) first to avoid duplicates.
+              Please check [existing issues](https://github.com/adonh/mumu/issues?q=is%3Aissue) first to avoid duplicates.
 
     - type: checkboxes
       attributes:
@@ -17,8 +17,8 @@ body:
 
     - type: input
       attributes:
-          label: Mimi version
-          description: Run `mimi version` and paste the output.
+          label: mumu version
+          description: Run `mumu --version` and paste the output.
           placeholder: "0.1.0"
       validations:
           required: true
@@ -51,16 +51,16 @@ body:
           label: Steps to reproduce
           description: Minimal steps to reliably reproduce the issue.
           placeholder: |
-              1. Launch Mimi
+              1. Run `mumu save`
               2. ...
       validations:
           required: true
 
     - type: textarea
       attributes:
-          label: Config (relevant sections)
-          description: Paste the relevant sections of your config TOML. Remove any parts that aren't related to the bug.
-          render: toml
+          label: Command output
+          description: Paste the relevant command output, including `mumu status`.
+          render: shell
       validations:
           required: false
 

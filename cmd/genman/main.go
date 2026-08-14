@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra/doc"
 
-	"github.com/y3owk1n/mimi/cmd/mimi/cmd"
+	"github.com/adonh/mumu/cmd/mumu/cmd"
 )
 
 func main() {
@@ -35,11 +35,11 @@ func main() {
 	}
 
 	header := &doc.GenManHeader{
-		Title:   "MIMI",
+		Title:   "MUMU",
 		Section: "1",
 		Date:    &now,
-		Manual:  "Mimi Manual",
-		Source:  "Mimi " + cmd.Version,
+		Manual:  "Mumu Manual",
+		Source:  "Mumu " + cmd.Version,
 	}
 
 	err = doc.GenManTree(cmd.RootCmd, header, outputDir)

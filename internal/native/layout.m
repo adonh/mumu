@@ -1,6 +1,6 @@
 //
 //  layout.m
-//  mimi
+//  mumu
 //
 //  Window enumeration across all Mission Control Spaces for the layout
 //  save/restore capability.
@@ -17,7 +17,7 @@
 //  Trade-offs of this approach (see the layout-save-restore change's
 //  design.md for the full writeup):
 //   - Window titles (kCGWindowName) are redacted to NULL system-wide unless
-//     the process has Screen Recording permission, which mimi's layout
+//     the process has Screen Recording permission, which mumu's layout
 //     capability therefore requires in addition to Accessibility.
 //   - Minimized state can only be determined for windows on a currently
 //     displayed Space, by checking membership in the
@@ -27,8 +27,8 @@
 //     there's no reliable per-window minimized signal available for them.
 //
 
-#import "mimi.h"
-#import "mimi_log.h"
+#import "mumu.h"
+#import "mumu_log.h"
 
 #import <Cocoa/Cocoa.h>
 #import <CoreFoundation/CoreFoundation.h>
@@ -39,7 +39,7 @@
 
 // Private SkyLight / WindowServer symbols (not in the public SDK). See
 // docs/ARCHITECTURE.md for the private-API risk notes that already apply to
-// mimi's existing Space primitives; this file follows the same pattern.
+// mumu's existing Space primitives; this file follows the same pattern.
 extern int SLSMainConnectionID(void);
 extern CFArrayRef SLSCopyManagedDisplaySpaces(int cid);
 extern CFArrayRef CGSCopySpacesForWindows(int cid, uint32_t mask, CFArrayRef windowIDs);
@@ -48,19 +48,19 @@ extern uint64_t SLSManagedDisplayGetCurrentSpace(int cid, CFStringRef uuid);
 // Space type value for fullscreen Spaces, per SLSCopyManagedDisplaySpaces'
 // "type" field (0 = standard/user, 4 = fullscreen). Undocumented; derived
 // from empirical observation and prior art in other private-API tooling.
-static const int kMimiSpaceTypeFullscreen = 4;
+static const int kMumuSpaceTypeFullscreen = 4;
 
 // Mask for CGSCopySpacesForWindows: include the window's current space plus
 // other/user spaces. Matches prior art usage in other CGSInternal-based
 // tooling.
-static const uint32_t kMimiAllSpacesMask = 0x7;
+static const uint32_t kMumuAllSpacesMask = 0x7;
 
 #pragma mark - String Helpers
 
 /// Copies a CFStringRef into a malloc'd, NUL-terminated UTF-8 C string.
 /// Never returns NULL: an empty string is returned if str is NULL or the
 /// conversion fails, so callers can always safely free() the result.
-static char *mimiCopyUTF8String(CFStringRef str) {
+static char *mumuCopyUTF8String(CFStringRef str) {
 	if (!str) {
 		return strdup("");
 	}
@@ -84,7 +84,7 @@ static char *mimiCopyUTF8String(CFStringRef str) {
 
 /// Builds the set of Space IDs whose type is fullscreen, for O(1) lookup
 /// while enumerating windows.
-static NSSet<NSNumber *> *mimiCopyFullscreenSpaceIDs(void) {
+static NSSet<NSNumber *> *mumuCopyFullscreenSpaceIDs(void) {
 	NSMutableSet<NSNumber *> *fullscreenSids = [NSMutableSet set];
 
 	CFArrayRef displaySpaces = SLSCopyManagedDisplaySpaces(SLSMainConnectionID());
@@ -110,7 +110,7 @@ static NSSet<NSNumber *> *mimiCopyFullscreenSpaceIDs(void) {
 				CFNumberGetValue(typeRef, kCFNumberIntType, &type);
 			}
 
-			if (type != kMimiSpaceTypeFullscreen) {
+			if (type != kMumuSpaceTypeFullscreen) {
 				continue;
 			}
 
@@ -134,7 +134,7 @@ static NSSet<NSNumber *> *mimiCopyFullscreenSpaceIDs(void) {
 /// display (i.e. each display's "current space"). Used to scope
 /// minimized-window detection: only windows on one of these Spaces can be
 /// reliably checked against the on-screen window list.
-static NSSet<NSNumber *> *mimiCopyActiveSpaceIDs(void) {
+static NSSet<NSNumber *> *mumuCopyActiveSpaceIDs(void) {
 	NSMutableSet<NSNumber *> *activeSids = [NSMutableSet set];
 
 	int cid = SLSMainConnectionID();
@@ -169,7 +169,7 @@ static NSSet<NSNumber *> *mimiCopyActiveSpaceIDs(void) {
 /// than batched) because passing multiple window IDs in one call returns a
 /// deduplicated, unordered union of Spaces rather than a 1:1 per-window
 /// mapping.
-static uint64_t mimiSpaceIDForWindow(int cid, CGWindowID wid) {
+static uint64_t mumuSpaceIDForWindow(int cid, CGWindowID wid) {
 	CFNumberRef windowNumber = CFNumberCreate(NULL, kCFNumberIntType, &wid);
 	if (!windowNumber) {
 		return 0;
@@ -181,7 +181,7 @@ static uint64_t mimiSpaceIDForWindow(int cid, CGWindowID wid) {
 		return 0;
 	}
 
-	CFArrayRef spaces = CGSCopySpacesForWindows(cid, kMimiAllSpacesMask, windowIDs);
+	CFArrayRef spaces = CGSCopySpacesForWindows(cid, kMumuAllSpacesMask, windowIDs);
 	CFRelease(windowIDs);
 
 	if (!spaces) {
@@ -207,7 +207,7 @@ static uint64_t mimiSpaceIDForWindow(int cid, CGWindowID wid) {
 /// whose Space is currently displayed: windows on other Spaces are never
 /// "on-screen" regardless of minimized state, so absence from this set
 /// can't by itself be used to infer minimized state for them.
-static NSSet<NSNumber *> *mimiCopyOnscreenWindowIDs(void) {
+static NSSet<NSNumber *> *mumuCopyOnscreenWindowIDs(void) {
 	NSMutableSet<NSNumber *> *onscreen = [NSMutableSet set];
 
 	CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
@@ -240,7 +240,7 @@ static NSSet<NSNumber *> *mimiCopyOnscreenWindowIDs(void) {
 /// system-wide results down to real user application windows (excluding the
 /// Dock, menu bar items, background agents, etc.) and to attach a bundle ID
 /// to each window without a second AX round-trip.
-static NSDictionary<NSNumber *, NSString *> *mimiCopyRegularAppBundleIDsByPID(void) {
+static NSDictionary<NSNumber *, NSString *> *mumuCopyRegularAppBundleIDsByPID(void) {
 	NSMutableDictionary<NSNumber *, NSString *> *byPID = [NSMutableDictionary dictionary];
 
 	for (NSRunningApplication *app in [NSWorkspace sharedWorkspace].runningApplications) {
@@ -256,7 +256,7 @@ static NSDictionary<NSNumber *, NSString *> *mimiCopyRegularAppBundleIDsByPID(vo
 
 #pragma mark - Public Layout Window Enumeration API
 
-MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
+MumuLayoutWindowInfo *MumuGetAllWindowsAcrossSpaces(int *count) {
 	if (!count) {
 		return NULL;
 	}
@@ -266,10 +266,10 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 	@autoreleasepool {
 		int cid = SLSMainConnectionID();
 
-		NSSet<NSNumber *> *fullscreenSids = mimiCopyFullscreenSpaceIDs();
-		NSSet<NSNumber *> *activeSids = mimiCopyActiveSpaceIDs();
-		NSSet<NSNumber *> *onscreenWids = mimiCopyOnscreenWindowIDs();
-		NSDictionary<NSNumber *, NSString *> *bundleIDsByPID = mimiCopyRegularAppBundleIDsByPID();
+		NSSet<NSNumber *> *fullscreenSids = mumuCopyFullscreenSpaceIDs();
+		NSSet<NSNumber *> *activeSids = mumuCopyActiveSpaceIDs();
+		NSSet<NSNumber *> *onscreenWids = mumuCopyOnscreenWindowIDs();
+		NSDictionary<NSNumber *, NSString *> *bundleIDsByPID = mumuCopyRegularAppBundleIDsByPID();
 
 		CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
 		if (!windowList) {
@@ -278,7 +278,7 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 
 		// Collected as parallel NSMutableArrays (rather than growing a C
 		// array) since the final count isn't known up front; converted to
-		// the flat MimiLayoutWindowInfo array once enumeration finishes.
+		// the flat MumuLayoutWindowInfo array once enumeration finishes.
 		NSMutableArray<NSNumber *> *collectedWids = [NSMutableArray array];
 		NSMutableArray<NSString *> *collectedBundleIDs = [NSMutableArray array];
 		NSMutableArray<NSString *> *collectedTitles = [NSMutableArray array];
@@ -324,7 +324,7 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 				continue;
 			}
 
-			uint64_t sid = mimiSpaceIDForWindow(cid, (CGWindowID)wid);
+			uint64_t sid = mumuSpaceIDForWindow(cid, (CGWindowID)wid);
 			if (sid == 0) {
 				// Unresolvable (e.g. a phantom/offscreen helper window that
 				// isn't actually attached to any Space) — skip rather than
@@ -344,7 +344,7 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 			NSString *title = @"";
 			CFStringRef titleRef = (CFStringRef)CFDictionaryGetValue(info, kCGWindowName);
 			if (titleRef) {
-				char *titleCStr = mimiCopyUTF8String(titleRef);
+				char *titleCStr = mumuCopyUTF8String(titleRef);
 				title = [NSString stringWithUTF8String:titleCStr] ?: @"";
 				free(titleCStr);
 			}
@@ -365,15 +365,15 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 			return NULL;
 		}
 
-		MimiLayoutWindowInfo *result = (MimiLayoutWindowInfo *)calloc(resultCount, sizeof(MimiLayoutWindowInfo));
+		MumuLayoutWindowInfo *result = (MumuLayoutWindowInfo *)calloc(resultCount, sizeof(MumuLayoutWindowInfo));
 		if (!result) {
 			return NULL;
 		}
 
 		for (NSUInteger i = 0; i < resultCount; i++) {
 			result[i].wid = (uint32_t)collectedWids[i].unsignedIntValue;
-			result[i].bundleID = mimiCopyUTF8String((__bridge CFStringRef)collectedBundleIDs[i]);
-			result[i].title = mimiCopyUTF8String((__bridge CFStringRef)collectedTitles[i]);
+			result[i].bundleID = mumuCopyUTF8String((__bridge CFStringRef)collectedBundleIDs[i]);
+			result[i].title = mumuCopyUTF8String((__bridge CFStringRef)collectedTitles[i]);
 			result[i].sid = collectedSids[i].unsignedLongLongValue;
 			result[i].fullscreen = collectedFullscreen[i].boolValue ? 1 : 0;
 		}
@@ -384,7 +384,7 @@ MimiLayoutWindowInfo *MimiGetAllWindowsAcrossSpaces(int *count) {
 	}
 }
 
-void MimiFreeLayoutWindowInfo(MimiLayoutWindowInfo *info, int count) {
+void MumuFreeLayoutWindowInfo(MumuLayoutWindowInfo *info, int count) {
 	if (!info) {
 		return;
 	}

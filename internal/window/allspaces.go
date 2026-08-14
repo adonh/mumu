@@ -2,14 +2,14 @@ package window
 
 /*
 #cgo CFLAGS: -x objective-c
-#include "../native/mimi.h"
+#include "../native/mumu.h"
 */
 import "C"
 
 import (
 	"unsafe"
 
-	derrors "github.com/y3owk1n/mimi/internal/errors"
+	derrors "github.com/adonh/mumu/internal/errors"
 )
 
 // AcrossSpacesEntry represents one window discovered across all Mission
@@ -26,10 +26,10 @@ type AcrossSpacesEntry struct {
 }
 
 // MoveToSpace moves this window to the Mission Control space with the
-// given macOS space ID, without altering its position or size. Unlike the
-// frontmost-window move used by "mimi action move_window_to_space", this
-// deliberately does not activate the target display, since layout restore
-// may move many windows across many displays in one pass.
+// given macOS space ID, without altering its position or size. Unlike
+// Element.MoveToSpace's frontmost-window move, this deliberately does not
+// activate the target display, since layout restore may move many windows
+// across many displays in one pass.
 func (e AcrossSpacesEntry) MoveToSpace(spaceID uint64) error {
 	return MoveWindowIDToSpace(e.WindowID, spaceID)
 }
@@ -38,7 +38,7 @@ func (e AcrossSpacesEntry) MoveToSpace(spaceID uint64) error {
 // Mission Control space with the given macOS space ID. See
 // AcrossSpacesEntry.MoveToSpace for behavior notes.
 func MoveWindowIDToSpace(windowID uint32, spaceID uint64) error {
-	result := C.MimiMoveWindowIDToSpace(C.uint32_t(windowID), C.uint64_t(spaceID))
+	result := C.MumuMoveWindowIDToSpace(C.uint32_t(windowID), C.uint64_t(spaceID))
 	if result == 0 {
 		return derrors.New(derrors.CodeActionFailed, "failed to move window to space")
 	}
@@ -48,21 +48,21 @@ func MoveWindowIDToSpace(windowID uint32, spaceID uint64) error {
 
 // AllAcrossSpaces enumerates windows across all Mission Control spaces for
 // every running regular application, resolving each window's current space
-// ID via mimi's existing private WindowServer connection. Unlike
+// ID via mumu's existing private WindowServer connection. Unlike
 // AllFocusableOnActiveSpace, this is not limited to the currently active
 // space. Minimized windows are excluded when that can be determined (see
-// MimiGetAllWindowsAcrossSpaces).
+// MumuGetAllWindowsAcrossSpaces).
 func AllAcrossSpaces() ([]AcrossSpacesEntry, error) {
 	var count C.int
 
-	infoPtr := C.MimiGetAllWindowsAcrossSpaces(&count)
+	infoPtr := C.MumuGetAllWindowsAcrossSpaces(&count)
 	if infoPtr == nil || count == 0 {
 		return nil, nil
 	}
-	defer C.MimiFreeLayoutWindowInfo(infoPtr, count) //nolint:nlreturn
+	defer C.MumuFreeLayoutWindowInfo(infoPtr, count) //nolint:nlreturn
 
 	total := int(count)
-	cSlice := (*[1 << 20]C.MimiLayoutWindowInfo)(unsafe.Pointer(infoPtr))[:total:total]
+	cSlice := (*[1 << 20]C.MumuLayoutWindowInfo)(unsafe.Pointer(infoPtr))[:total:total]
 
 	result := make([]AcrossSpacesEntry, total)
 	for i, info := range cSlice {

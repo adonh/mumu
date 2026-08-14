@@ -1,194 +1,61 @@
 <div align="center">
 
-# mimi
+# mumu
 
-**macOS windows and spaces. From the terminal.**
+**Save and restore window-to-Space layouts on macOS. From the terminal.**
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/y3owk1n/mimi?style=flat-square&logo=go)](https://github.com/y3owk1n/mimi)
-[![License](https://img.shields.io/github/license/y3owk1n/mimi?style=flat-square)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/adonh/mumu?style=flat-square&logo=go)](https://github.com/adonh/mumu)
+[![License](https://img.shields.io/github/license/adonh/mumu?style=flat-square)](LICENSE)
 [![Early Development](https://img.shields.io/badge/status-early%20dev-orange?style=flat-square)](#)
 
 </div>
 
 ---
 
-https://github.com/user-attachments/assets/1b21b596-1578-4344-96d3-eaea8a5ab9c0
-
----
-
-You already know your way around a terminal. Why are you still reaching for the trackpad just to move a window?
-
-**mimi** gives you one-shot commands to jump spaces, move windows, cycle focus, and resize — bind them to hotkeys, drop them in dotfiles, wire them to shell hooks. No SIP disable. No tiling paradigm to learn. Just commands that do what they say.
+Reconnect your monitors and get every window back on the Space it was on — without relaunching anything.
 
 ```bash
-mimi action space 2                      # jump to space 2
-mimi action move_window_to_space next    # throw window forward
-mimi action resize_window left-half      # tile left
-mimi action focus_window                 # cycle focus
+mumu save        # remember what's where, for this display setup
+mumu restore     # put matching, already-open windows back
 ```
 
-> **Early development** — config format, CLI, and behavior may change between releases.
+> **Early development** — CLI and behavior may change between releases.
 
 ---
 
 ## Install
 
 ```bash
-brew tap y3owk1n/tap
-brew install --cask y3owk1n/tap/mimi
+brew tap adonh/tap
+brew install --cask adonh/tap/mumu
 ```
 
-Grant **Accessibility** in **System Settings → Privacy & Security → Accessibility**, then start using it immediately. No daemon required.
-
-`mimi layout` (save/restore window-to-space layouts) additionally needs **Screen Recording** — see [Save & restore layouts](#save--restore-layouts).
+Grant **Accessibility** and **Screen Recording** in **System Settings → Privacy & Security**, then start using it immediately. There's no daemon, no background process, and no config file — `mumu` only ever does something when you run one of its commands.
 
 Other options (Nix flake, build from source) → [Installation Guide](docs/INSTALLATION.md)
 
 ---
 
-## What mimi does
+## What mumu does
 
-| You want to…                     | Command                                                                   |
-| :------------------------------- | :------------------------------------------------------------------------ |
-| Jump to a specific space         | `mimi action space <n>`                                                   |
-| Jump to next / previous space    | `mimi action space next` / `prev`                                         |
-| Move frontmost window to a space | `mimi action move_window_to_space <n\|next\|prev>`                        |
-| Cycle focus between windows      | `mimi action focus_window`                                                |
-| Cycle focus backward             | `mimi action focus_window --backward`                                     |
-| Focus window to the left         | `mimi action focus_window --left`                                         |
-| Focus window to the right        | `mimi action focus_window --right`                                        |
-| Focus window above               | `mimi action focus_window --up`                                           |
-| Focus window below               | `mimi action focus_window --down`                                         |
-| Tile window to a preset          | `mimi action resize_window <left-half\|right-half\|center\|fill>`         |
-| Center at specific size          | `mimi action resize_window center --width-percent 80 --height-percent 90` |
-| Resize to exact pixels           | `mimi action resize_window --width 1024 --height 768`                     |
-| Resize anchored to a corner      | `mimi action resize_window --width 1024 --height 768 --anchor br`         |
+| You want to…                     | Command             |
+| :-------------------------------- | :------------------- |
+| Save the current layout           | `mumu save`          |
+| Restore the saved layout          | `mumu restore`       |
+| List all saved layouts            | `mumu list`          |
+| Preview a saved layout            | `mumu show`          |
+| Delete a saved layout             | `mumu delete`        |
+| Check permission status           | `mumu status`        |
+
+Layouts are saved and looked up by the number of currently connected displays, so plugging in (or unplugging) a monitor automatically finds the right saved arrangement. Restore only ever moves windows belonging to apps that are already running — it never launches anything, and never creates or deletes Spaces. Space numbers count left to right across all your displays, matching how you actually see them laid out, regardless of which display macOS considers "primary."
 
 Full reference → [CLI Guide](docs/CLI.md)
 
 ---
 
-## Bind to hotkeys
-
-Every action is a plain shell command. Drop it into whatever hotkey tool you already use.
-
-**[skhd](https://github.com/koekeishiya/skhd)** — the natural pairing if you're in the yabai ecosystem:
-
-```bash
-# ~/.skhdrc
-alt - 2         : mimi action space 2
-alt - n         : mimi action space next
-alt - p         : mimi action space prev
-shift + alt - l : mimi action resize_window right-half
-shift + alt - h : mimi action resize_window left-half
-shift + alt - m : mimi action move_window_to_space next
-shift + alt - f : mimi action focus_window
-```
-
-**[Raycast](https://www.raycast.com/)** — create a Script Command pointing to any `mimi action …` line.
-
-**[Alfred](https://www.alfredapp.com/)** — wire up a Shell Script workflow step, same idea.
-
-**Karabiner, Hammerspoon, BetterTouchTool** — if it can run a shell command on a keypress, mimi works with it.
-
----
-
-## Save & restore layouts
-
-Reconnect your monitors and get every window back on the space it was on — without relaunching anything.
-
-```bash
-mimi layout save        # remember what's where, for this display setup
-mimi layout restore     # put matching, already-open windows back
-mimi layout list         # see what's saved
-```
-
-Layouts are keyed by display count, so plugging in (or unplugging) a monitor automatically finds the right saved arrangement. Restore only ever moves windows belonging to apps that are already running — it never launches anything, and never creates or deletes spaces. Space numbers count left to right across all your displays, matching how you actually see them laid out, regardless of which display macOS considers "primary."
-
-Needs **Screen Recording** permission (in addition to Accessibility) to read window titles reliably — grant it in **System Settings → Privacy & Security → Screen Recording**.
-
-Full reference → [CLI Guide](docs/CLI.md#layout-saverestore)
-
----
-
-## Fits where you are
-
-mimi doesn't tile your layout, enforce window rules, or replace Mission Control. It's not trying to.
-
-[yabai](https://github.com/koekeishiya/yabai) and [AeroSpace](https://github.com/nikitabobko/AeroSpace) are excellent — and a significant commitment. If you've tried them and found it was more than you needed, or if you just want to stay on native macOS Spaces and drive them faster, mimi is for you.
-
----
-
-## Optional: daemon + hooks
-
-Start the daemon and mimi can react to what's happening on screen — fire a shell command whenever a window focuses, a space changes, or an app launches.
-
-```bash
-mimi config init   # creates ~/.config/mimi/config.toml
-mimi start
-mimi status        # verify everything's running
-```
-
-Edit `~/.config/mimi/config.toml`:
-
-```toml
-[systray]
-enabled = true
-show_workspace_number = true   # current space number in your menu bar
-
-[hooks]
-on_window_focus      = ['echo "$mimi_APP_NAME — $mimi_WINDOW_TITLE"']
-on_workspace_changed = ['~/.config/sketchybar/plugins/space.sh']
-on_app_launch        = ['osascript -e "display notification \"$mimi_APP_NAME launched\""']
-```
-
-The `[systray]` block shows the active space number in your menu bar while the daemon runs — no extra setup.
-
-### Available hooks
-
-| Event                  | Hook key                                 | Needs Accessibility |
-| :--------------------- | :--------------------------------------- | :------------------ |
-| App activated          | `on_app_activate`                        | Yes                 |
-| App deactivated        | `on_app_deactivate`                      | Yes                 |
-| App launched           | `on_app_launch`                          | No                  |
-| App quit               | `on_app_quit`                            | No                  |
-| App hidden / unhidden  | `on_app_hide` / `on_app_unhide`          | Yes                 |
-| Window focused         | `on_window_focus`                        | Yes                 |
-| Window title changed   | `on_window_title_change`                 | Yes                 |
-| Window opened / closed | `on_window_created` / `on_window_closed` | Yes                 |
-| Window resized         | `on_window_resize`                       | Yes                 |
-| Active space changed   | `on_workspace_changed`                   | No                  |
-
-Hooks support app/title filters, async execution, and per-hook timeouts.
-Full details → [Configuration Guide](docs/CONFIGURATION.md)
-
-### Daemon commands
-
-```bash
-mimi start                  # start the hook daemon
-mimi stop                   # stop it
-mimi status                 # check daemon state and permissions
-mimi config validate        # validate config before reloading
-mimi config reload          # hot-reload config (no restart needed)
-mimi services install       # auto-start at login via launchd
-mimi services uninstall     # remove the launchd agent
-```
-
-Auto-start setup → [Installation Guide — launchd](docs/INSTALLATION.md#auto-start-launchd)
-
----
-
 ## How it works
 
-Space switching uses a synthetic dock-swipe gesture — the same path Mission Control uses, no hacks. Window-to-space moves use the private SkyLight API for instant, animation-free relocation. Everything else goes through public Accessibility APIs.
-
-```
-CLI actions  →  action handler  →  AX API + SkyLight
-
-daemon  →  observe events  →  event bus  →  your shell hooks
-                                    ↓
-                             menu bar (optional)
-```
+Window enumeration uses `CGWindowListCopyWindowInfo` (so it sees windows on every Space, not just the currently displayed one), and window-to-Space moves use the private SkyLight API for instant, animation-free relocation. Everything else goes through public Accessibility APIs. No SIP disable is required.
 
 → [Architecture Guide](docs/ARCHITECTURE.md)
 
@@ -196,14 +63,13 @@ daemon  →  observe events  →  event bus  →  your shell hooks
 
 ## Documentation
 
-| Guide                                      | What's in it                                |
-| :----------------------------------------- | :------------------------------------------ |
-| [Installation](docs/INSTALLATION.md)       | Homebrew, Nix, source, permissions, launchd |
-| [CLI](docs/CLI.md)                         | Every command and flag                      |
-| [Configuration](docs/CONFIGURATION.md)     | Hooks, env vars, systray, all settings      |
-| [Architecture](docs/ARCHITECTURE.md)       | How the pieces fit                          |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes                     |
-| [Contributing](CONTRIBUTING.md)            | PRs and bug reports                         |
+| Guide                                      | What's in it                     |
+| :----------------------------------------- | :-------------------------------- |
+| [Installation](docs/INSTALLATION.md)       | Homebrew, Nix, source, permissions |
+| [CLI](docs/CLI.md)                         | Every command and flag            |
+| [Architecture](docs/ARCHITECTURE.md)       | How the pieces fit                |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes           |
+| [Contributing](CONTRIBUTING.md)            | PRs and bug reports               |
 
 ---
 
@@ -217,20 +83,6 @@ just build && just lint && just test
 
 ---
 
-## From the same workshop
-
-mimi's window management and space-switching code was part of **[neru](https://github.com/y3owk1n/neru)** — a broader tool for navigating your entire screen without touching the mouse.
-
-Where mimi is focused on moving and resizing windows, neru covers the rest: labels on every clickable element, recursive grid navigation, vim-style scrolling — the kind of thing Vimium does in a browser, but system-wide.
-
-If you find yourself still reaching for the mouse _inside_ apps, neru is the natural next step.
-
-```bash
-brew install --cask y3owk1n/tap/neru
-```
-
----
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
@@ -241,9 +93,7 @@ MIT — see [LICENSE](LICENSE).
 **Try it. Two commands and you're running.**
 
 ```bash
-brew install --cask y3owk1n/tap/mimi && mimi action space next
+brew install --cask adonh/tap/mumu && mumu save
 ```
 
-<br/>
-Made with ❤️ by <a href="https://github.com/y3owk1n">y3owk1n</a>
 </div>

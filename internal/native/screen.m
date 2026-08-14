@@ -1,9 +1,9 @@
 //
 //  screen.m
-//  mimi
+//  mumu
 //
 
-#import "mimi.h"
+#import "mumu.h"
 
 #import <Cocoa/Cocoa.h>
 
@@ -64,9 +64,9 @@ static bool detectMissionControlActive(void) {
 	}
 }
 
-bool MimiIsMissionControlActive(void) { return detectMissionControlActive(); }
+bool MumuIsMissionControlActive(void) { return detectMissionControlActive(); }
 
-double *MimiGetScreenFrameForPoint(double x, double y) {
+double *MumuGetScreenFrameForPoint(double x, double y) {
 	@autoreleasepool {
 		NSScreen *primary = [NSScreen mainScreen];
 		CGFloat primaryHeight = [primary frame].size.height;
@@ -101,7 +101,7 @@ double *MimiGetScreenFrameForPoint(double x, double y) {
 	}
 }
 
-double *MimiGetScreenVisibleFrameForPoint(double x, double y) {
+double *MumuGetScreenVisibleFrameForPoint(double x, double y) {
 	@autoreleasepool {
 		NSScreen *primary = [NSScreen mainScreen];
 		CGFloat primaryHeight = [primary frame].size.height;
@@ -136,7 +136,7 @@ double *MimiGetScreenVisibleFrameForPoint(double x, double y) {
 	}
 }
 
-bool MimiTiledWindowMarginsEnabled(void) {
+bool MumuTiledWindowMarginsEnabled(void) {
 	@autoreleasepool {
 		// CFPreferences is the most reliable way to read other app's preferences
 		Boolean keyExists = false;
@@ -152,7 +152,7 @@ bool MimiTiledWindowMarginsEnabled(void) {
 	}
 }
 
-double MimiTiledWindowMarginSize(void) {
+double MumuTiledWindowMarginSize(void) {
 	@autoreleasepool {
 		// macOS Sequoia (15+) added a configurable TiledWindowSpacing key.
 		CFPropertyListRef val =

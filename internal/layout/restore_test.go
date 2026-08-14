@@ -3,7 +3,7 @@ package layout //nolint:testpackage // tests unexported matchWindowIndex / intSl
 import (
 	"testing"
 
-	"github.com/y3owk1n/mimi/internal/window"
+	"github.com/adonh/mumu/internal/window"
 )
 
 func liveEntry(title string) window.AcrossSpacesEntry {

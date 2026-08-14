@@ -2,18 +2,18 @@ package space
 
 /*
 #cgo CFLAGS: -x objective-c
-#include "../native/mimi.h"
+#include "../native/mumu.h"
 */
 import "C"
 
 import (
-	derrors "github.com/y3owk1n/mimi/internal/errors"
-	_ "github.com/y3owk1n/mimi/internal/native"
+	derrors "github.com/adonh/mumu/internal/errors"
+	_ "github.com/adonh/mumu/internal/native"
 )
 
 // Focus focuses the Mission Control space at the given 1-based index.
 func Focus(index int) error {
-	count := int(C.MimiCountMissionControlSpaces())
+	count := int(C.MumuCountMissionControlSpaces())
 	if count == 0 {
 		return derrors.New(derrors.CodeActionFailed, "failed to enumerate Mission Control spaces")
 	}
@@ -27,7 +27,7 @@ func Focus(index int) error {
 		)
 	}
 
-	sid := uint64(C.MimiMissionControlSpaceID(C.int(index)))
+	sid := uint64(C.MumuMissionControlSpaceID(C.int(index)))
 	if sid == 0 {
 		return derrors.Newf(
 			derrors.CodeActionFailed,
@@ -36,7 +36,7 @@ func Focus(index int) error {
 		)
 	}
 
-	did := uint32(C.MimiSpaceDisplayID(C.uint64_t(sid)))
+	did := uint32(C.MumuSpaceDisplayID(C.uint64_t(sid)))
 	if did == 0 {
 		return derrors.Newf(
 			derrors.CodeActionFailed,
@@ -45,7 +45,7 @@ func Focus(index int) error {
 		)
 	}
 
-	if C.MimiFocusSpaceUsingGesture(C.uint32_t(did), C.uint64_t(sid)) == 0 {
+	if C.MumuFocusSpaceUsingGesture(C.uint32_t(did), C.uint64_t(sid)) == 0 {
 		return derrors.New(derrors.CodeActionFailed, "failed to focus Mission Control space")
 	}
 
@@ -54,7 +54,15 @@ func Focus(index int) error {
 
 // Count returns the total number of Mission Control spaces.
 func Count() int {
-	return int(C.MimiCountMissionControlSpaces())
+	return int(C.MumuCountMissionControlSpaces())
+}
+
+// MissionControlIndexForSpace returns the 1-based Mission Control index for
+// a given macOS space ID — the same numbering Focus/MoveWindow accept, and
+// the same ordinal macOS's own "Switch to Desktop <n>" keyboard shortcut
+// uses — or 0 if the space ID is not currently known.
+func MissionControlIndexForSpace(sid uint64) int {
+	return int(C.MumuMissionControlIndexForSpace(C.uint64_t(sid)))
 }
 
 // ActiveIndex returns the 1-based index of the currently active space.
@@ -67,13 +75,13 @@ func ActiveIndex() (int, error) {
 		)
 	}
 
-	activeID := uint64(C.MimiActiveSpaceID())
+	activeID := uint64(C.MumuActiveSpaceID())
 	if activeID == 0 {
 		return 0, derrors.New(derrors.CodeActionFailed, "failed to resolve active space ID")
 	}
 
 	for i := 1; i <= count; i++ {
-		sid := uint64(C.MimiMissionControlSpaceID(C.int(i)))
+		sid := uint64(C.MumuMissionControlSpaceID(C.int(i)))
 		if sid == activeID {
 			return i, nil
 		}
@@ -84,7 +92,7 @@ func ActiveIndex() (int, error) {
 
 // MoveWindow moves the frontmost window to the space at the given 1-based index.
 func MoveWindow(index int) error {
-	count := int(C.MimiCountMissionControlSpaces())
+	count := int(C.MumuCountMissionControlSpaces())
 	if count == 0 {
 		return derrors.New(derrors.CodeActionFailed, "failed to enumerate Mission Control spaces")
 	}
@@ -98,7 +106,7 @@ func MoveWindow(index int) error {
 		)
 	}
 
-	sid := uint64(C.MimiMissionControlSpaceID(C.int(index)))
+	sid := uint64(C.MumuMissionControlSpaceID(C.int(index)))
 	if sid == 0 {
 		return derrors.Newf(
 			derrors.CodeActionFailed,
@@ -107,7 +115,7 @@ func MoveWindow(index int) error {
 		)
 	}
 
-	frontmost := C.MimiGetFrontmostWindow()
+	frontmost := C.MumuGetFrontmostWindow()
 	if frontmost == nil {
 		return derrors.New(
 			derrors.CodeActionFailed,
@@ -115,15 +123,15 @@ func MoveWindow(index int) error {
 		)
 	}
 
-	defer C.MimiReleaseElement(frontmost) //nolint:nlreturn
+	defer C.MumuReleaseElement(frontmost) //nolint:nlreturn
 
-	if C.MimiMoveWindowToSpace(frontmost, C.uint64_t(sid)) == 0 { //nolint:nlreturn
+	if C.MumuMoveWindowToSpace(frontmost, C.uint64_t(sid)) == 0 { //nolint:nlreturn
 		return derrors.New(derrors.CodeActionFailed, "failed to move window to space")
 	}
 
-	targetDid := uint32(C.MimiSpaceDisplayID(C.uint64_t(sid)))
-	if targetDid != 0 && targetDid != uint32(C.MimiCursorDisplayID()) {
-		C.MimiActivateDisplay(C.uint32_t(targetDid))
+	targetDid := uint32(C.MumuSpaceDisplayID(C.uint64_t(sid)))
+	if targetDid != 0 && targetDid != uint32(C.MumuCursorDisplayID()) {
+		C.MumuActivateDisplay(C.uint32_t(targetDid))
 	}
 
 	return nil

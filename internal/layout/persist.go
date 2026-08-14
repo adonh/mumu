@@ -8,13 +8,17 @@ import (
 	"strconv"
 	"strings"
 
-	derrors "github.com/y3owk1n/mimi/internal/errors"
-	"github.com/y3owk1n/mimi/internal/paths"
+	derrors "github.com/adonh/mumu/internal/errors"
+	"github.com/adonh/mumu/internal/paths"
 )
 
 // DefaultDir is the default directory where saved layouts are stored,
-// following mimi's existing "~/.local/share/mimi" user-data convention.
-const DefaultDir = "~/.local/share/mimi/layouts"
+// following the "~/.local/share/<app>" user-data convention. This changed
+// from the pre-rebrand app's equivalent path as part of the rename: there's
+// no installed user base to preserve continuity for, and keeping the old
+// app name here would undercut the rebrand's whole point of avoiding
+// confusion with that unrelated, similarly-named app.
+const DefaultDir = "~/.local/share/mumu/layouts"
 
 func dirPath() string {
 	return paths.ExpandHome(DefaultDir)
@@ -55,7 +59,7 @@ func Load(displayCount int) (*Layout, error) {
 		if os.IsNotExist(err) {
 			return nil, derrors.Newf(
 				derrors.CodeInvalidInput,
-				"no saved layout found for %d display(s); run 'mimi layout save' first",
+				"no saved layout found for %d display(s); run 'mumu save' first",
 				displayCount,
 			)
 		}

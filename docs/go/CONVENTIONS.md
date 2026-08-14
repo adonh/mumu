@@ -8,9 +8,9 @@
 - Avoid underscores, hyphens, or mixed caps
 
 ```go
-package config
-package events
-package hooks
+package layout
+package space
+package permissions
 ```
 
 ### Package Documentation
@@ -18,8 +18,8 @@ package hooks
 Every package should have a `doc.go` file with package-level documentation:
 
 ```go
-// Package config provides TOML configuration loading and validation for mimi.
-package config
+// Package layout captures, persists, and restores window-to-Space layouts for mumu.
+package layout
 ```
 
 ## File Structure
@@ -48,9 +48,8 @@ import (
   "os"
 
   "github.com/spf13/cobra"
-  "go.uber.org/zap"
 
-  "github.com/y3owk1n/mimi/internal/events"
+  "github.com/adonh/mumu/internal/layout"
 )
 ```
 
@@ -59,16 +58,12 @@ import (
 - Packages: lowercase, short, descriptive
 - Variables: camelCase local, PascalCase exported
 - Constants: PascalCase exported, camelCase unexported
-- Receiver names: consistent single-letter (e.g., `o` for `WorkspaceObserver`, `w` for `Watcher`)
+- Receiver names: consistent single-letter (e.g., `c` for `Capture`, `r` for `Restorer`)
 
 ## Function Parameters
 
 - `context.Context` first parameter when needed for cancellable operations
 - Required parameters before optional
-
-```go
-func (ex *Executor) Run(ctx context.Context, sub <-chan events.Event)
-```
 
 ## Return Values
 
@@ -76,12 +71,12 @@ func (ex *Executor) Run(ctx context.Context, sub <-chan events.Event)
 - Use named return values sparingly
 
 ```go
-func (l *Loader) Load(path string) (*Config, error) {
-  cfg, err := l.parse(path)
+func Load(displayCount int) (*Layout, error) {
+  data, err := os.ReadFile(pathFor(displayCount))
   if err != nil {
     return nil, err
   }
-  return cfg, nil
+  return parse(data)
 }
 ```
 
@@ -90,30 +85,19 @@ func (l *Loader) Load(path string) (*Config, error) {
 Use the `derrors` package for structured errors:
 
 ```go
-import derrors "github.com/y3owk1n/mimi/internal/errors"
+import derrors "github.com/adonh/mumu/internal/errors"
 
 // Create new error
-return derrors.New(derrors.CodeInvalidConfig, "config validation failed")
+return derrors.New(derrors.CodeInvalidInput, "display count must be positive")
 
 // Wrap existing error
-return derrors.Wrapf(err, derrors.CodeConfigIOFailed, "reading config")
+return derrors.Wrapf(err, derrors.CodeSerializationFailed, "encoding layout")
 ```
 
 ## Context
 
 - Accept `context.Context` as first parameter for cancellable operations
 - Don't store context in structs
-
-```go
-func (w *Watcher) Run(ctx context.Context) error {
-  select {
-  case <-ctx.Done():
-    return nil
-  case ev := <-w.fileWatcher.Events:
-    // ...
-  }
-}
-```
 
 ## Concurrency
 
@@ -122,14 +106,6 @@ func (w *Watcher) Run(ctx context.Context) error {
 - Use `sync.RWMutex` for read-heavy workloads
 - Use `sync.Mutex` for write-heavy or simple cases
 - Always defer unlock immediately after lock
-
-```go
-func (s *Service) Get(id string) (*Item, error) {
-  s.mu.RLock()
-  defer s.mu.RUnlock()
-  return s.cache[id], nil
-}
-```
 
 ### Goroutines
 
@@ -143,9 +119,9 @@ func (s *Service) Get(id string) (*Item, error) {
 - Explain _why_ for non-obvious code, not _what_
 
 ```go
-// Pre-allocate slice capacity to avoid reallocations during env var building.
-// Typical event has 9 base vars plus Extra entries.
-vars := make([]string, 0, baseEnvVarCount+len(evt.Extra))
+// Pace window moves so WindowServer has time to catch up; moving many
+// windows back-to-back can otherwise silently drop moves.
+time.Sleep(moveDelay)
 ```
 
 ## Performance
@@ -153,24 +129,12 @@ vars := make([]string, 0, baseEnvVarCount+len(evt.Extra))
 ### Pre-allocation
 
 ```go
-vars := make([]string, 0, expectedCount)
-envMap := make(map[string]string, len(env))
-```
-
-### String Building
-
-```go
-var b strings.Builder
-b.WriteString("mimi_")
-b.WriteString(key)
-b.WriteString("=")
-b.WriteString(value)
-return b.String()
+entries := make([]Entry, 0, expectedCount)
 ```
 
 ## macOS-Specific Conventions
 
-mimi is macOS-only, so no cross-platform build tags or platform factories are needed. CGo code lives in `internal/native/`.
+mumu is macOS-only, so no cross-platform build tags or platform factories are needed. CGo code lives in `internal/native/`.
 
 ## See Also
 

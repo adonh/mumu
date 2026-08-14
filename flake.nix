@@ -1,5 +1,5 @@
 {
-  description = "macOS window and space utility";
+  description = "Save and restore window-to-Space layouts on macOS";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,7 +17,7 @@
       latestVersion = "0.9.2";
 
       # Function to build package with specific version
-      makeMimiPackage =
+      makeMumuPackage =
         pkgs: version: useZip: commitHash:
         pkgs.callPackage ./nix/package.nix {
           inherit version useZip commitHash;
@@ -25,8 +25,8 @@
     in
     {
       overlays.default = final: prev: {
-        mimi = makeMimiPackage final latestVersion true null;
-        mimi-source = makeMimiPackage final "main" false (self.rev or self.dirtyRev or "unknown");
+        mumu = makeMumuPackage final latestVersion true null;
+        mumu-source = makeMumuPackage final "main" false (self.rev or self.dirtyRev or "unknown");
       };
 
       # Packages output using the overlay
@@ -40,14 +40,11 @@
         in
         {
           # Default: latest version from zip for all supported platforms
-          default = makeMimiPackage pkgs latestVersion true null;
+          default = makeMumuPackage pkgs latestVersion true null;
 
           # Build from source (for users who want to build from source)
-          source = makeMimiPackage pkgs "main" false (self.rev or self.dirtyRev or "unknown");
+          source = makeMumuPackage pkgs "main" false (self.rev or self.dirtyRev or "unknown");
         }
       );
-
-      darwinModules.default = import ./nix/darwin.nix;
-      homeManagerModules.default = import ./nix/home.nix;
     };
 }

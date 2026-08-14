@@ -2,7 +2,7 @@ package window
 
 /*
 #cgo CFLAGS: -x objective-c
-#include "../native/mimi.h"
+#include "../native/mumu.h"
 #include <stdlib.h>
 */
 import "C"
@@ -10,8 +10,8 @@ import "C"
 import (
 	"unsafe"
 
-	derrors "github.com/y3owk1n/mimi/internal/errors"
-	_ "github.com/y3owk1n/mimi/internal/native"
+	derrors "github.com/adonh/mumu/internal/errors"
+	_ "github.com/adonh/mumu/internal/native"
 )
 
 // Element represents a UI element in the macOS accessibility hierarchy.
@@ -33,7 +33,7 @@ func AllFocusableOnActiveSpace() ([]*Element, error) {
 func AllFocusableOnActiveSpaceWithFocused() ([]*Element, int, error) {
 	var count C.int
 	var focused C.int
-	windows := C.MimiGetAllFocusableWindowsOnActiveSpaceWithFocused(&count, &focused)
+	windows := C.MumuGetAllFocusableWindowsOnActiveSpaceWithFocused(&count, &focused)
 	if windows == nil || count == 0 {
 		if windows != nil {
 			C.free(unsafe.Pointer(windows))
@@ -56,7 +56,7 @@ func AllFocusableOnActiveSpaceWithFocused() ([]*Element, int, error) {
 
 // Frontmost returns the frontmost window.
 func Frontmost() *Element {
-	ref := C.MimiGetFrontmostWindow()
+	ref := C.MumuGetFrontmostWindow()
 	if ref == nil {
 		return nil
 	}
@@ -73,7 +73,7 @@ func (e *Element) Activate() error {
 		)
 	}
 
-	result := C.MimiActivateWindow(e.ref) //nolint:nlreturn
+	result := C.MumuActivateWindow(e.ref) //nolint:nlreturn
 	if result == 0 {
 		return derrors.New(derrors.CodeAccessibilityFailed, "failed to activate window")
 	}
@@ -82,10 +82,9 @@ func (e *Element) Activate() error {
 }
 
 // MoveToSpace moves this window to the Mission Control space with the given
-// macOS space ID, without altering its position or size. Unlike the
-// frontmost-window move used by "mimi action move_window_to_space", this
-// deliberately does not activate the target display, since layout restore
-// may move many windows across many displays in one pass.
+// macOS space ID, without altering its position or size. This deliberately
+// does not activate the target display, since layout restore may move many
+// windows across many displays in one pass.
 func (e *Element) MoveToSpace(spaceID uint64) error {
 	if e.ref == nil {
 		return derrors.New(
@@ -94,7 +93,7 @@ func (e *Element) MoveToSpace(spaceID uint64) error {
 		)
 	}
 
-	result := C.MimiMoveWindowToSpace(e.ref, C.uint64_t(spaceID)) //nolint:nlreturn
+	result := C.MumuMoveWindowToSpace(e.ref, C.uint64_t(spaceID)) //nolint:nlreturn
 	if result == 0 {
 		return derrors.New(derrors.CodeActionFailed, "failed to move window to space")
 	}
@@ -105,7 +104,7 @@ func (e *Element) MoveToSpace(spaceID uint64) error {
 // Release releases the element reference.
 func (e *Element) Release() {
 	if e.ref != nil {
-		C.MimiReleaseElement(e.ref)
+		C.MumuReleaseElement(e.ref)
 		e.ref = nil
 	}
 }
@@ -138,7 +137,7 @@ func (e *Element) Equal(other *Element) bool {
 		return true
 	}
 
-	result := C.MimiAreElementsEqual(e.ref, other.ref) //nolint:nlreturn
+	result := C.MumuAreElementsEqual(e.ref, other.ref) //nolint:nlreturn
 
 	return result == 1
 }
@@ -152,7 +151,7 @@ func (e *Element) GetFrame() (float64, float64, float64, float64, error) {
 		)
 	}
 
-	frame := C.MimiGetWindowFrame(e.ref) //nolint:nlreturn
+	frame := C.MumuGetWindowFrame(e.ref) //nolint:nlreturn
 	if frame == nil {
 		return 0, 0, 0, 0, derrors.New(
 			derrors.CodeAccessibilityFailed,
@@ -184,7 +183,7 @@ func (e *Element) SetFrame(posX, posY, width, height float64) error {
 		)
 	}
 
-	result := C.MimiSetWindowFrame(
+	result := C.MumuSetWindowFrame(
 		e.ref,
 		C.double(posX),
 		C.double(posY),
@@ -214,7 +213,7 @@ func PrimaryScreenHeight() (float64, error) {
 
 // ScreenFrame returns the full frame [x, y, w, h] of the screen containing (x, y).
 func ScreenFrame(xCoord, yCoord float64) (float64, float64, float64, float64, error) {
-	frame := C.MimiGetScreenFrameForPoint(C.double(xCoord), C.double(yCoord))
+	frame := C.MumuGetScreenFrameForPoint(C.double(xCoord), C.double(yCoord))
 	if frame == nil {
 		return 0, 0, 0, 0, derrors.New(
 			derrors.CodeAccessibilityFailed,
@@ -240,7 +239,7 @@ func ScreenFrame(xCoord, yCoord float64) (float64, float64, float64, float64, er
 // ScreenVisibleFrame returns the visible frame [x, y, w, h] of the screen containing (x, y),
 // excluding the dock and menu bar.
 func ScreenVisibleFrame(xCoord, yCoord float64) (float64, float64, float64, float64, error) {
-	frame := C.MimiGetScreenVisibleFrameForPoint(C.double(xCoord), C.double(yCoord))
+	frame := C.MumuGetScreenVisibleFrameForPoint(C.double(xCoord), C.double(yCoord))
 	if frame == nil {
 		return 0, 0, 0, 0, derrors.New(
 			derrors.CodeAccessibilityFailed,
@@ -265,15 +264,15 @@ func ScreenVisibleFrame(xCoord, yCoord float64) (float64, float64, float64, floa
 
 // TiledWindowMarginsEnabled reports whether the system tiled window margins setting is enabled.
 func TiledWindowMarginsEnabled() bool {
-	return bool(C.MimiTiledWindowMarginsEnabled())
+	return bool(C.MumuTiledWindowMarginsEnabled())
 }
 
 // TiledWindowMarginSize returns the tiled window margin size in points.
 func TiledWindowMarginSize() float64 {
-	return float64(C.MimiTiledWindowMarginSize())
+	return float64(C.MumuTiledWindowMarginSize())
 }
 
 // MissionControlActive reports whether Mission Control is currently open.
 func MissionControlActive() bool {
-	return bool(C.MimiIsMissionControlActive())
+	return bool(C.MumuIsMissionControlActive())
 }
