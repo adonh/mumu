@@ -65,6 +65,11 @@ type moveTarget struct {
 	fallback bool
 }
 
+type fallbackTarget struct {
+	ordinal int
+	sid     uint64
+}
+
 func moveFailureSkip(target moveTarget) SkippedEntry {
 	return SkippedEntry{
 		Entry:    target.entry,
@@ -185,7 +190,7 @@ func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSumm
 		liveByBundle,
 		usedIndex,
 		validAssignmentOrdinals,
-		space.MenuBarActiveLogicalIndex,
+		primaryDisplayFallbackTarget,
 		space.LogicalSpaceID,
 	)
 	toMove = append(toMove, fallbackMoves...)
@@ -308,7 +313,7 @@ func planFallbackMoves(
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedByBundle map[string]map[int]bool,
 	assignmentOrdinals map[string][]int,
-	primaryDisplayOrdinal func() (int, error),
+	primaryDisplayTarget func() (fallbackTarget, error),
 	logicalSpaceID func(int) uint64,
 ) ([]moveTarget, []SkippedEntry) {
 	bundleIDs := make([]string, 0, len(assignmentOrdinals))
@@ -324,9 +329,9 @@ func planFallbackMoves(
 	)
 
 	for _, bundleID := range bundleIDs {
-		ordinal, hasTarget, err := fallbackTargetOrdinal(
+		target, hasTarget, err := fallbackTargetForAssignments(
 			assignmentOrdinals[bundleID],
-			primaryDisplayOrdinal,
+			primaryDisplayTarget,
 		)
 		if !hasTarget {
 			continue
@@ -340,10 +345,9 @@ func planFallbackMoves(
 			usedByBundle[bundleID] = used
 		}
 
-		sid := uint64(0)
-		if err == nil {
-			sid = logicalSpaceID(ordinal)
-			if sid == 0 {
+		if err == nil && target.sid == 0 {
+			target.sid = logicalSpaceID(target.ordinal)
+			if target.sid == 0 {
 				err = derrors.New(
 					derrors.CodeActionFailed,
 					"failed to resolve fallback space",
@@ -360,7 +364,7 @@ func planFallbackMoves(
 				BundleID: bundleID,
 				Title:    liveEntry.Title,
 				Index:    -1,
-				Ordinal:  ordinal,
+				Ordinal:  target.ordinal,
 			}
 			if err != nil {
 				skipped = append(
@@ -381,7 +385,7 @@ func planFallbackMoves(
 				targets,
 				moveTarget{
 					windowID: liveEntry.WindowID,
-					sid:      sid,
+					sid:      target.sid,
 					entry:    entry,
 					fallback: true,
 				},
@@ -392,12 +396,21 @@ func planFallbackMoves(
 	return targets, skipped
 }
 
-func fallbackTargetOrdinal(
+func primaryDisplayFallbackTarget() (fallbackTarget, error) {
+	spaceID, ordinal, err := space.PrimaryDisplayCurrentSpace()
+	if err != nil {
+		return fallbackTarget{}, err
+	}
+
+	return fallbackTarget{ordinal: ordinal, sid: spaceID}, nil
+}
+
+func fallbackTargetForAssignments(
 	assignmentOrdinals []int,
-	primaryDisplayOrdinal func() (int, error),
-) (int, bool, error) {
+	primaryDisplayTarget func() (fallbackTarget, error),
+) (fallbackTarget, bool, error) {
 	if len(assignmentOrdinals) == 0 {
-		return 0, false, nil
+		return fallbackTarget{}, false, nil
 	}
 
 	counts := map[int]int{}
@@ -419,22 +432,22 @@ func fallbackTargetOrdinal(
 	}
 
 	if !tied {
-		return ordinal, true, nil
+		return fallbackTarget{ordinal: ordinal}, true, nil
 	}
 
-	primaryOrdinal, err := primaryDisplayOrdinal()
+	target, err := primaryDisplayTarget()
 	if err != nil {
-		return 0, true, err
+		return fallbackTarget{}, true, err
 	}
 
-	if primaryOrdinal < 1 {
-		return 0, true, derrors.New(
+	if target.ordinal < 1 || target.sid == 0 {
+		return fallbackTarget{}, true, derrors.New(
 			derrors.CodeActionFailed,
-			"failed to resolve the primary display's current logical space",
+			"failed to resolve the primary display's current space",
 		)
 	}
 
-	return primaryOrdinal, true, nil
+	return target, true, nil
 }
 
 func intSlicesEqual(left, right []int) bool {
