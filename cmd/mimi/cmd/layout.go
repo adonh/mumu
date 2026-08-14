@@ -72,7 +72,7 @@ not minimized.
 
 Overwrites any previously saved layout for the same display count.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		captured, summary, err := layout.Capture()
+		captured, summary, err := layout.Capture(func(msg string) { cmd.Println(msg) })
 		if err != nil {
 			return err
 		}
@@ -142,7 +142,7 @@ Use --yes to skip the prompt.`,
 			}
 		}
 
-		summary, err := layout.Restore(saved)
+		summary, err := layout.Restore(saved, func(msg string) { cmd.Println(msg) })
 		if err != nil {
 			return err
 		}
@@ -226,12 +226,12 @@ connected displays.`,
 		})
 
 		for _, entry := range entries {
-			title := entry.Title
-			if title == "" {
-				title = "(untitled)"
-			}
-
-			cmd.Printf("  space %d: %s — %q\n", entry.Ordinal, entry.BundleID, title)
+			cmd.Printf(
+				"  space %d: %s — %q\n",
+				entry.Ordinal,
+				entry.BundleID,
+				displayTitle(entry.Title),
+			)
 		}
 
 		return nil
@@ -306,6 +306,14 @@ func promptConfirm(cmd *cobra.Command, question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
+func displayTitle(title string) string {
+	if title == "" {
+		return "(untitled)"
+	}
+
+	return title
+}
+
 func printRestoreSummary(cmd *cobra.Command, summary layout.RestoreSummary) {
 	cmd.Printf("Restored %d window(s)\n", summary.Moved)
 
@@ -313,9 +321,9 @@ func printRestoreSummary(cmd *cobra.Command, summary layout.RestoreSummary) {
 		return
 	}
 
-	byReason := map[layout.SkipReason]int{}
+	byReason := map[layout.SkipReason][]layout.Entry{}
 	for _, s := range summary.Skipped {
-		byReason[s.Reason]++
+		byReason[s.Reason] = append(byReason[s.Reason], s.Entry)
 	}
 
 	cmd.Printf("Skipped %d entry(ies):\n", len(summary.Skipped))
@@ -326,8 +334,20 @@ func printRestoreSummary(cmd *cobra.Command, summary layout.RestoreSummary) {
 		layout.SkipOrdinalOutOfRange,
 		layout.SkipMoveFailed,
 	} {
-		if n := byReason[reason]; n > 0 {
-			cmd.Printf("  %d: %s\n", n, reason)
+		entries := byReason[reason]
+		if len(entries) == 0 {
+			continue
+		}
+
+		cmd.Printf("  %s (%d):\n", reason, len(entries))
+
+		for _, entry := range entries {
+			cmd.Printf(
+				"    - %s — %q (space %d)\n",
+				entry.BundleID,
+				displayTitle(entry.Title),
+				entry.Ordinal,
+			)
 		}
 	}
 }

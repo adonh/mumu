@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"fmt"
+
 	derrors "github.com/y3owk1n/mimi/internal/errors"
 	"github.com/y3owk1n/mimi/internal/space"
 	"github.com/y3owk1n/mimi/internal/window"
@@ -55,6 +57,7 @@ func DetectDrift(saved *Layout) ArrangementDrift {
 type moveTarget struct {
 	windowID uint32
 	sid      uint64
+	entry    Entry // for progress reporting and skip-detail on move failure
 }
 
 // Restore applies a saved layout: for each saved window entry, it finds a
@@ -68,15 +71,21 @@ type moveTarget struct {
 // creates or removes spaces; entries whose target space no longer exists
 // are skipped and reported.
 //
+// progress, if non-nil, receives status updates while windows are scanned
+// and moved — the latter can take a while since each move is paced to let
+// WindowServer catch up; pass nil to discard them.
+//
 // Callers are responsible for any arrangement-drift confirmation prompt
 // (see DetectDrift) before calling Restore.
-func Restore(saved *Layout) (RestoreSummary, error) {
+func Restore(saved *Layout, progress ProgressFunc) (RestoreSummary, error) {
 	summary := RestoreSummary{}
 
 	err := ensureLayoutPermissions()
 	if err != nil {
 		return summary, err
 	}
+
+	progress.emit("Scanning currently open windows...")
 
 	liveEntries, err := window.AllAcrossSpaces()
 	if err != nil {
@@ -141,13 +150,32 @@ func Restore(saved *Layout) (RestoreSummary, error) {
 			continue
 		}
 
-		toMove = append(toMove, moveTarget{windowID: live[matchIdx].WindowID, sid: sid})
+		toMove = append(
+			toMove,
+			moveTarget{windowID: live[matchIdx].WindowID, sid: sid, entry: entry},
+		)
 	}
 
-	for _, m := range toMove {
-		err := window.MoveWindowIDToSpace(m.windowID, m.sid)
+	if len(toMove) > 0 {
+		progress.emit(fmt.Sprintf("Moving %d window(s)...", len(toMove)))
+	}
+
+	for moveIdx, target := range toMove {
+		progress.emit(fmt.Sprintf(
+			"  [%d/%d] %s — %q → space %d",
+			moveIdx+1,
+			len(toMove),
+			target.entry.BundleID,
+			displayTitle(target.entry.Title),
+			target.entry.Ordinal,
+		))
+
+		err := window.MoveWindowIDToSpace(target.windowID, target.sid)
 		if err != nil {
-			summary.Skipped = append(summary.Skipped, SkippedEntry{Reason: SkipMoveFailed})
+			summary.Skipped = append(
+				summary.Skipped,
+				SkippedEntry{Entry: target.entry, Reason: SkipMoveFailed},
+			)
 		} else {
 			summary.Moved++
 		}

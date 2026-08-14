@@ -166,13 +166,15 @@ Space numbers used by `mimi layout` are counted **left to right across all conne
 
 ### `mimi layout save`
 
-Captures, for every non-fullscreen window on every space across all connected displays, its owning application's bundle identifier, window title, and logical (left-to-right) space number. Persists the result keyed by the current display count, overwriting any previous save for that same count.
+Captures, for every non-fullscreen window on every space across all connected displays, its owning application's bundle identifier, window title, and logical (left-to-right) space number. Persists the result keyed by the current display count, overwriting any previous save for that same count. Prints a status line before scanning starts, since enumerating windows can take a moment.
 
 ### `mimi layout restore [--yes]`
 
 Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. Never creates or removes spaces — entries whose target space no longer exists are skipped and reported.
 
 If the current per-display space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
+
+Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (bundle ID, title, and target space) so it's never a silent pause. Afterward, any skipped entries are listed grouped by reason, each showing the bundle ID, title, and saved space — including the specific windows that couldn't be matched to a currently open window.
 
 ### `mimi layout list`
 

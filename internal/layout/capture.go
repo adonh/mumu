@@ -23,7 +23,10 @@ func ensureLayoutPermissions() error {
 // Control spaces across all connected displays, using the logical
 // left-to-right space numbering (see internal/space). Fullscreen windows
 // are excluded entirely, per the space-layout capability's scope.
-func Capture() (*Layout, CaptureSummary, error) {
+//
+// progress, if non-nil, receives status updates while the (potentially
+// slow) native window enumeration runs; pass nil to discard them.
+func Capture(progress ProgressFunc) (*Layout, CaptureSummary, error) {
 	err := ensureLayoutPermissions()
 	if err != nil {
 		return nil, CaptureSummary{}, err
@@ -38,6 +41,8 @@ func Capture() (*Layout, CaptureSummary, error) {
 			"failed to enumerate connected displays",
 		)
 	}
+
+	progress.emit("Scanning windows across all Spaces...")
 
 	entries, err := window.AllAcrossSpaces()
 	if err != nil {
