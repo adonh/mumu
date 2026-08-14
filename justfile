@@ -1,4 +1,4 @@
-# Mimi Build System
+# Mumu Build System
 # Version information (can be overridden)
 
 VERSION := `git describe --tags --always --dirty 2>/dev/null || echo "dev"`
@@ -7,31 +7,31 @@ BUILD_DATE := `date -u +"%Y-%m-%dT%H:%M:%SZ"`
 
 # Ldflags for version injection
 
-LDFLAGS := "-s -w -X github.com/y3owk1n/mimi/cmd/mimi/cmd.Version=" + VERSION + " -X github.com/y3owk1n/mimi/cmd/mimi/cmd.GitCommit=" + GIT_COMMIT + " -X github.com/y3owk1n/mimi/cmd/mimi/cmd.BuildDate=" + BUILD_DATE
+LDFLAGS := "-s -w -X github.com/adonh/mumu/cmd/mumu/cmd.Version=" + VERSION + " -X github.com/adonh/mumu/cmd/mumu/cmd.GitCommit=" + GIT_COMMIT + " -X github.com/adonh/mumu/cmd/mumu/cmd.BuildDate=" + BUILD_DATE
 
 # Default build
 default: build
 
 # Build the binary
 build:
-    @echo "Building Mimi..."
+    @echo "Building Mumu..."
     @echo "Version: {{ VERSION }}"
-    {{ if os() == "windows" { "CGO_ENABLED=0" } else { "CGO_ENABLED=1" } }} go build -ldflags="{{ LDFLAGS }}" -o bin/mimi{{ if os() == "windows" { ".exe" } else { "" } }} ./cmd/mimi
-    @echo "✓ Build complete: bin/mimi"
+    {{ if os() == "windows" { "CGO_ENABLED=0" } else { "CGO_ENABLED=1" } }} go build -ldflags="{{ LDFLAGS }}" -o bin/mumu{{ if os() == "windows" { ".exe" } else { "" } }} ./cmd/mumu
+    @echo "✓ Build complete: bin/mumu"
 
 build-darwin:
-    @echo "Building Mimi for macOS..."
+    @echo "Building Mumu for macOS..."
     mkdir -p bin
-    CGO_ENABLED=1 go build -ldflags="{{ LDFLAGS }}" -o bin/mimi-darwin ./cmd/mimi
-    @echo "✓ Build complete: bin/mimi-darwin"
+    CGO_ENABLED=1 go build -ldflags="{{ LDFLAGS }}" -o bin/mumu-darwin ./cmd/mumu
+    @echo "✓ Build complete: bin/mumu-darwin"
 
 release:
     @echo "Building release version..."
     @echo "Version: {{ VERSION }}"
     @echo "Commit: {{ GIT_COMMIT }}"
     @echo "Date: {{ BUILD_DATE }}"
-    CGO_ENABLED=1 go build -ldflags="{{ LDFLAGS }}" -trimpath -o bin/mimi ./cmd/mimi
-    @echo "✓ Release build complete: bin/mimi"
+    CGO_ENABLED=1 go build -ldflags="{{ LDFLAGS }}" -trimpath -o bin/mumu ./cmd/mumu
+    @echo "✓ Release build complete: bin/mumu"
 
 # Usage: just release-ci-darwin arm64 v1.2.3
 release-ci-darwin ARCH VERSION_OVERRIDE:
@@ -40,24 +40,24 @@ release-ci-darwin ARCH VERSION_OVERRIDE:
     @echo "Commit: {{ GIT_COMMIT }}"
     @echo "Date: {{ BUILD_DATE }}"
     mkdir -p bin
-    CGO_ENABLED=1 GOOS=darwin GOARCH={{ ARCH }} go build -ldflags="-s -w -X github.com/y3owk1n/mimi/cmd/mimi/cmd.Version={{ VERSION_OVERRIDE }} -X github.com/y3owk1n/mimi/cmd/mimi/cmd.GitCommit={{ GIT_COMMIT }} -X github.com/y3owk1n/mimi/cmd/mimi/cmd.BuildDate={{ BUILD_DATE }}" -trimpath -o bin/mimi-darwin-{{ ARCH }} ./cmd/mimi
+    CGO_ENABLED=1 GOOS=darwin GOARCH={{ ARCH }} go build -ldflags="-s -w -X github.com/adonh/mumu/cmd/mumu/cmd.Version={{ VERSION_OVERRIDE }} -X github.com/adonh/mumu/cmd/mumu/cmd.GitCommit={{ GIT_COMMIT }} -X github.com/adonh/mumu/cmd/mumu/cmd.BuildDate={{ BUILD_DATE }}" -trimpath -o bin/mumu-darwin-{{ ARCH }} ./cmd/mumu
     @echo "✓ Release artifact for darwin/{{ ARCH }} built successfully"
 
 # Bundle the application
 bundle: release
-    @echo "Bundling Mimi..."
-    mkdir -p build/Mimi.app/Contents/{MacOS,Resources}
+    @echo "Bundling Mumu..."
+    mkdir -p build/Mumu.app/Contents/{MacOS,Resources}
 
-    cp -r bin/mimi build/Mimi.app/Contents/MacOS/mimi
+    cp -r bin/mumu build/Mumu.app/Contents/MacOS/mumu
 
-    # cp resources/icon.icns build/Mimi.app/Contents/Resources/icon.icns
-    cp resources/Mimi.entitlements build/Mimi.app/Contents/Resources/Mimi.entitlements
+    # cp resources/icon.icns build/Mumu.app/Contents/Resources/icon.icns
+    cp resources/Mumu.entitlements build/Mumu.app/Contents/Resources/Mumu.entitlements
 
-    sed "s/VERSION/{{ VERSION }}/g" resources/Info.plist.template > build/Mimi.app/Contents/Info.plist
+    sed "s/VERSION/{{ VERSION }}/g" resources/Info.plist.template > build/Mumu.app/Contents/Info.plist
 
-    codesign --force --deep --sign - --entitlements resources/Mimi.entitlements --options runtime build/Mimi.app
+    codesign --force --deep --sign - --entitlements resources/Mumu.entitlements --options runtime build/Mumu.app
 
-    @echo "✓ Bundle complete: build/Mimi.app"
+    @echo "✓ Bundle complete: build/Mumu.app"
 
 # Run tests
 
@@ -105,7 +105,7 @@ fmt-check:
         if [ $RESULT -ne 0 ] && [ -n "$FILTERED" ]; then
             EXIT_CODE=1
         fi
-    done < <(find internal/native internal/systray internal/permissions \( -name "*.h" -o -name "*.m" -o -name "*.c" \) -print0)
+    done < <(find internal/native internal/permissions \( -name "*.h" -o -name "*.m" -o -name "*.c" \) -print0)
     if [ $EXIT_CODE -ne 0 ]; then
         echo "Some Objective-C files are not properly formatted. Run 'just fmt' to fix them."
         exit 1
@@ -132,7 +132,7 @@ fmt:
     golangci-lint fmt
     golangci-lint run --fix
     @echo "Formatting Objective-C files..."
-    @find internal/native internal/systray internal/permissions \( -name "*.h" -o -name "*.m" -o -name "*.c" \) -exec sh -c 'case "$1" in *.c) af=file.c;; *) af=file.m;; esac; clang-format -i --style=file --assume-filename="$af" "$1"' _ {} \;
+    @find internal/native internal/permissions \( -name "*.h" -o -name "*.m" -o -name "*.c" \) -exec sh -c 'case "$1" in *.c) af=file.c;; *) af=file.m;; esac; clang-format -i --style=file --assume-filename="$af" "$1"' _ {} \;
     @echo "✓ Format complete"
 
 # Lint code

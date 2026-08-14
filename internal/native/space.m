@@ -1,13 +1,13 @@
 //
 //  space.m
-//  Mimi
+//  Mumu
 //
-//  Copyright © 2025 Mimi. All rights reserved.
+//  Copyright © 2025 Mumu. All rights reserved.
 //
 
 #import "constants.h"
-#import "mimi.h"
-#import "mimi_log.h"
+#import "mumu.h"
+#import "mumu_log.h"
 
 #import <ApplicationServices/ApplicationServices.h>
 #import <Cocoa/Cocoa.h>
@@ -35,7 +35,7 @@ extern CGError SLSMoveWindowsToManagedSpace(int cid, CFArrayRef window_list, uin
 
 #pragma mark - Run Loop Helpers
 
-static void mimiEnsureApplication(void) {
+static void mumuEnsureApplication(void) {
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
 		@autoreleasepool {
@@ -44,14 +44,14 @@ static void mimiEnsureApplication(void) {
 	});
 }
 
-static void mimiPumpRunLoop(CFTimeInterval seconds) { CFRunLoopRunInMode(kCFRunLoopDefaultMode, seconds, false); }
+static void mumuPumpRunLoop(CFTimeInterval seconds) { CFRunLoopRunInMode(kCFRunLoopDefaultMode, seconds, false); }
 
 #pragma mark - Display / Space Helpers
 
 /// Translate a display ID to its UUID string.
 /// @param did Display identifier
 /// @return Retained CFStringRef (caller must CFRelease), or NULL on failure
-static CFStringRef mimiDisplayUUID(uint32_t did) {
+static CFStringRef mumuDisplayUUID(uint32_t did) {
 	CFUUIDRef uuidRef = CGDisplayCreateUUIDFromDisplayID(did);
 	if (!uuidRef) {
 		return NULL;
@@ -66,7 +66,7 @@ static CFStringRef mimiDisplayUUID(uint32_t did) {
 /// Translate a display UUID string back to a display ID.
 /// @param uuid UUID string
 /// @return Display ID, or 0 on failure
-static uint32_t mimiDisplayIDFromUUID(CFStringRef uuid) {
+static uint32_t mumuDisplayIDFromUUID(CFStringRef uuid) {
 	if (!uuid) {
 		return 0;
 	}
@@ -85,8 +85,8 @@ static uint32_t mimiDisplayIDFromUUID(CFStringRef uuid) {
 /// Get the current Mission Control space for a display.
 /// @param did Display identifier
 /// @return Space ID, or 0 on failure
-static uint64_t mimiDisplaySpaceID(uint32_t did) {
-	CFStringRef uuid = mimiDisplayUUID(did);
+static uint64_t mumuDisplaySpaceID(uint32_t did) {
+	CFStringRef uuid = mumuDisplayUUID(did);
 	if (!uuid) {
 		return 0;
 	}
@@ -98,14 +98,14 @@ static uint64_t mimiDisplaySpaceID(uint32_t did) {
 }
 
 /// Return the center point of a display's bounds (in CG coordinates).
-static CGPoint mimiDisplayCenter(uint32_t did) {
+static CGPoint mumuDisplayCenter(uint32_t did) {
 	CGRect bounds = CGDisplayBounds(did);
 
 	return (CGPoint){bounds.origin.x + bounds.size.width / 2.0, bounds.origin.y + bounds.size.height / 2.0};
 }
 
 /// Return the display ID that currently contains the cursor.
-static uint32_t mimiCursorDisplayID(void) {
+static uint32_t mumuCursorDisplayID(void) {
 	CGPoint cursor;
 	SLSGetCurrentCursorLocation(SLSMainConnectionID(), &cursor);
 
@@ -123,8 +123,8 @@ static uint32_t mimiCursorDisplayID(void) {
 
 /// Set the active menu bar display, which updates which display is the
 /// "focused" one for Space purposes.
-static void mimiSetActiveMenuBarDisplay(uint32_t did) {
-	CFStringRef uuid = mimiDisplayUUID(did);
+static void mumuSetActiveMenuBarDisplay(uint32_t did) {
+	CFStringRef uuid = mumuDisplayUUID(did);
 	if (!uuid) {
 		return;
 	}
@@ -137,7 +137,7 @@ static void mimiSetActiveMenuBarDisplay(uint32_t did) {
 
 /// Get the total number of Mission Control spaces across all displays
 /// in their current ordering.
-int MimiCountMissionControlSpaces(void) {
+int MumuCountMissionControlSpaces(void) {
 	@autoreleasepool {
 		CFArrayRef displaySpaces = SLSCopyManagedDisplaySpaces(SLSMainConnectionID());
 		if (!displaySpaces) {
@@ -163,7 +163,7 @@ int MimiCountMissionControlSpaces(void) {
 }
 
 /// Get the space ID at the given 1-based Mission Control index.
-uint64_t MimiMissionControlSpaceID(int index) {
+uint64_t MumuMissionControlSpaceID(int index) {
 	if (index < 1) {
 		return 0;
 	}
@@ -209,21 +209,66 @@ uint64_t MimiMissionControlSpaceID(int index) {
 	}
 }
 
+/// Get the 1-based Mission Control index for a given space ID (the same
+/// numbering MumuMissionControlSpaceID uses), or 0 if not found.
+int MumuMissionControlIndexForSpace(uint64_t sid) {
+	@autoreleasepool {
+		CFArrayRef displaySpaces = SLSCopyManagedDisplaySpaces(SLSMainConnectionID());
+		if (!displaySpaces) {
+			return 0;
+		}
+
+		int counter = 1;
+
+		CFIndex displayCount = CFArrayGetCount(displaySpaces);
+		for (CFIndex i = 0; i < displayCount; i++) {
+			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(displaySpaces, i);
+			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
+			if (!spacesRef) {
+				continue;
+			}
+
+			CFIndex spacesCount = CFArrayGetCount(spacesRef);
+			for (CFIndex j = 0; j < spacesCount; j++) {
+				CFDictionaryRef spaceRef = (CFDictionaryRef)CFArrayGetValueAtIndex(spacesRef, j);
+				CFNumberRef sidRef = (CFNumberRef)CFDictionaryGetValue(spaceRef, CFSTR("id64"));
+
+				uint64_t curSid = 0;
+				if (sidRef) {
+					CFNumberGetValue(sidRef, CFNumberGetType(sidRef), &curSid);
+				}
+
+				if (curSid == sid) {
+					CFRelease(displaySpaces);
+
+					return counter;
+				}
+
+				counter++;
+			}
+		}
+
+		CFRelease(displaySpaces);
+
+		return 0;
+	}
+}
+
 /// Get the display ID that owns a given space.
-uint32_t MimiSpaceDisplayID(uint64_t sid) {
+uint32_t MumuSpaceDisplayID(uint64_t sid) {
 	CFStringRef uuid = SLSCopyManagedDisplayForSpace(SLSMainConnectionID(), sid);
 	if (!uuid) {
 		return 0;
 	}
 
-	uint32_t did = mimiDisplayIDFromUUID(uuid);
+	uint32_t did = mumuDisplayIDFromUUID(uuid);
 	CFRelease(uuid);
 
 	return did;
 }
 
 /// Get the space ID currently active on the cursor's display.
-uint64_t MimiActiveSpaceID(void) { return mimiDisplaySpaceID(mimiCursorDisplayID()); }
+uint64_t MumuActiveSpaceID(void) { return mumuDisplaySpaceID(mumuCursorDisplayID()); }
 
 #pragma mark - Logical (Left-to-Right) Space Numbering Helpers
 
@@ -234,11 +279,11 @@ typedef struct {
 	double originX;
 	double originY;
 	uint32_t displayID;
-} MimiDisplaySpacesEntry;
+} MumuDisplaySpacesEntry;
 
-static int mimiCompareDisplaySpacesEntries(const void *lhs, const void *rhs) {
-	const MimiDisplaySpacesEntry *entryA = (const MimiDisplaySpacesEntry *)lhs;
-	const MimiDisplaySpacesEntry *entryB = (const MimiDisplaySpacesEntry *)rhs;
+static int mumuCompareDisplaySpacesEntries(const void *lhs, const void *rhs) {
+	const MumuDisplaySpacesEntry *entryA = (const MumuDisplaySpacesEntry *)lhs;
+	const MumuDisplaySpacesEntry *entryB = (const MumuDisplaySpacesEntry *)rhs;
 
 	if (entryA->originX != entryB->originX) {
 		return entryA->originX < entryB->originX ? -1 : 1;
@@ -258,7 +303,7 @@ static int mimiCompareDisplaySpacesEntries(const void *lhs, const void *rhs) {
 /// Returns SLSCopyManagedDisplaySpaces' display list re-sorted by physical
 /// left-to-right position (ties broken by y then display ID for
 /// determinism). Caller must CFRelease the result.
-static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
+static CFArrayRef mumuCopyDisplaySpacesSortedLeftToRight(void) {
 	CFArrayRef displaySpaces = SLSCopyManagedDisplaySpaces(SLSMainConnectionID());
 	if (!displaySpaces) {
 		return NULL;
@@ -269,7 +314,7 @@ static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
 		return displaySpaces;
 	}
 
-	MimiDisplaySpacesEntry *entries = calloc((size_t)displayCount, sizeof(MimiDisplaySpacesEntry));
+	MumuDisplaySpacesEntry *entries = calloc((size_t)displayCount, sizeof(MumuDisplaySpacesEntry));
 	if (!entries) {
 		CFRelease(displaySpaces);
 		return NULL;
@@ -278,9 +323,9 @@ static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
 	for (CFIndex i = 0; i < displayCount; i++) {
 		CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(displaySpaces, i);
 		CFStringRef uuid = (CFStringRef)CFDictionaryGetValue(displayRef, CFSTR("Display Identifier"));
-		uint32_t did = uuid ? mimiDisplayIDFromUUID(uuid) : 0;
+		uint32_t did = uuid ? mumuDisplayIDFromUUID(uuid) : 0;
 		CGRect bounds = did ? CGDisplayBounds(did) : CGRectZero;
-		entries[i] = (MimiDisplaySpacesEntry){
+		entries[i] = (MumuDisplaySpacesEntry){
 		    .displayRef = displayRef,
 		    .originX = bounds.origin.x,
 		    .originY = bounds.origin.y,
@@ -288,7 +333,7 @@ static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
 		};
 	}
 
-	qsort(entries, (size_t)displayCount, sizeof(MimiDisplaySpacesEntry), mimiCompareDisplaySpacesEntries);
+	qsort(entries, (size_t)displayCount, sizeof(MumuDisplaySpacesEntry), mumuCompareDisplaySpacesEntries);
 
 	CFMutableArrayRef sorted = CFArrayCreateMutable(NULL, displayCount, &kCFTypeArrayCallBacks);
 	if (sorted) {
@@ -306,9 +351,9 @@ static CFArrayRef mimiCopyDisplaySpacesSortedLeftToRight(void) {
 #pragma mark - Public Logical (Left-to-Right) Space Numbering API
 
 /// Total number of Spaces, counted in logical left-to-right order.
-int MimiLogicalSpaceCount(void) {
+int MumuLogicalSpaceCount(void) {
 	@autoreleasepool {
-		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return 0;
 		}
@@ -330,13 +375,13 @@ int MimiLogicalSpaceCount(void) {
 }
 
 /// The macOS Space ID at the given 1-based logical left-to-right index.
-uint64_t MimiLogicalSpaceID(int logicalIndex) {
+uint64_t MumuLogicalSpaceID(int logicalIndex) {
 	if (logicalIndex < 1) {
 		return 0;
 	}
 
 	@autoreleasepool {
-		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return 0;
 		}
@@ -377,9 +422,9 @@ uint64_t MimiLogicalSpaceID(int logicalIndex) {
 }
 
 /// The 1-based logical left-to-right index for a given macOS Space ID.
-int MimiLogicalIndexForSpace(uint64_t sid) {
+int MumuLogicalIndexForSpace(uint64_t sid) {
 	@autoreleasepool {
-		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return 0;
 		}
@@ -421,7 +466,7 @@ int MimiLogicalIndexForSpace(uint64_t sid) {
 }
 
 /// Per-display Space-count sequence in left-to-right order.
-int *MimiLeftToRightSpaceCounts(int *outCount) {
+int *MumuLeftToRightSpaceCounts(int *outCount) {
 	if (!outCount) {
 		return NULL;
 	}
@@ -429,7 +474,7 @@ int *MimiLeftToRightSpaceCounts(int *outCount) {
 	*outCount = 0;
 
 	@autoreleasepool {
-		CFArrayRef sorted = mimiCopyDisplaySpacesSortedLeftToRight();
+		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return NULL;
 		}
@@ -465,22 +510,22 @@ int *MimiLeftToRightSpaceCounts(int *outCount) {
 // horizontal dock swipe that the Dock treats as a real multi-finger swipe
 // gesture. These constants are not part of the public SDK and require
 // suppressing -Wdeprecated-declarations around the implementation.
-static const int kMimiCGSEventTypeField = 55;              // kCGSEventTypeField
-static const int kMimiCGSEventDockControl = 30;            // kCGSEventDockControl
-static const int kMimiCGEventGestureHIDType = 110;         // kCGEventGestureHIDType
-static const int kMimiIOHIDEventTypeDockSwipe = 23;        // kIOHIDEventTypeDockSwipe
-static const int kMimiCGEventGestureSwipeMotion = 123;     // kCGEventGestureSwipeMotion
-static const int kMimiCGGestureMotionHorizontal = 1;       // kCGGestureMotionHorizontal
-static const int kMimiCGEventGestureSwipeProgress = 124;   // kCGEventGestureSwipeProgress
-static const int kMimiCGEventGestureSwipeVelocityX = 129;  // kCGEventGestureSwipeVelocityX
-static const int kMimiCGEventGesturePhase = 132;           // kCGEventGesturePhase
-static const int kMimiCGSGesturePhaseBegan = 1;            // kCGSGesturePhaseBegan
-static const int kMimiCGSGesturePhaseEnded = 4;            // kCGSGesturePhaseEnded
+static const int kMumuCGSEventTypeField = 55;              // kCGSEventTypeField
+static const int kMumuCGSEventDockControl = 30;            // kCGSEventDockControl
+static const int kMumuCGEventGestureHIDType = 110;         // kCGEventGestureHIDType
+static const int kMumuIOHIDEventTypeDockSwipe = 23;        // kIOHIDEventTypeDockSwipe
+static const int kMumuCGEventGestureSwipeMotion = 123;     // kCGEventGestureSwipeMotion
+static const int kMumuCGGestureMotionHorizontal = 1;       // kCGGestureMotionHorizontal
+static const int kMumuCGEventGestureSwipeProgress = 124;   // kCGEventGestureSwipeProgress
+static const int kMumuCGEventGestureSwipeVelocityX = 129;  // kCGEventGestureSwipeVelocityX
+static const int kMumuCGEventGesturePhase = 132;           // kCGEventGesturePhase
+static const int kMumuCGSGesturePhaseBegan = 1;            // kCGSGesturePhaseBegan
+static const int kMumuCGSGesturePhaseEnded = 4;            // kCGSGesturePhaseEnded
 
 /// Return the 1-based local index of a space within its display's space
 /// ordering. Returns 0 if the space is not found on the given display.
-static int mimiLocalSpaceIndex(uint64_t sid, uint32_t did) {
-	CFStringRef uuid = mimiDisplayUUID(did);
+static int mumuLocalSpaceIndex(uint64_t sid, uint32_t did) {
+	CFStringRef uuid = mumuDisplayUUID(did);
 	if (!uuid) {
 		return 0;
 	}
@@ -534,36 +579,36 @@ static int mimiLocalSpaceIndex(uint64_t sid, uint32_t did) {
 /// Technique attribution: reverse-engineered from BetterTouchTool. Prior
 /// art: https://github.com/jurplel/InstantSpaceSwitcher and the wacom-driver-fix
 /// project by thenickdude.
-int MimiFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid) {
+int MumuFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
-	mimiEnsureApplication();
+	mumuEnsureApplication();
 
-	uint32_t curDid = mimiCursorDisplayID();
-	CGPoint point = mimiDisplayCenter(new_did);
+	uint32_t curDid = mumuCursorDisplayID();
+	CGPoint point = mumuDisplayCenter(new_did);
 	bool focusDisplay = curDid != new_did;
 
 	if (focusDisplay) {
 		CGWarpMouseCursorPosition(point);
 		// Give the system a moment to process the warp before querying the
 		// current space on the target display.
-		mimiPumpRunLoop(kMimiSpaceGestureProcessingDelay);
+		mumuPumpRunLoop(kMumuSpaceGestureProcessingDelay);
 	}
 
 	// After any warp, resolve the swipe count using per-display local space
 	// indices. Swipe gestures navigate spaces on the active display only, so
 	// the global Mission Control index distance is wrong when crossing displays.
-	uint64_t fromSid = mimiDisplaySpaceID(new_did);
-	int fromIdx = mimiLocalSpaceIndex(fromSid, new_did);
-	int toIdx = mimiLocalSpaceIndex(new_sid, new_did);
+	uint64_t fromSid = mumuDisplaySpaceID(new_did);
+	int fromIdx = mumuLocalSpaceIndex(fromSid, new_did);
+	int toIdx = mumuLocalSpaceIndex(new_sid, new_did);
 
 	if (fromIdx == 0 || toIdx == 0) {
 		// Could not resolve local indices (e.g. transient state).
 		// Best-effort fallback: ensure the right display is active so the OS
 		// picks the closest matching space on that display.
-		mimiSetActiveMenuBarDisplay(new_did);
-		mimiPumpRunLoop(kMimiSpaceGestureProcessingDelay);
+		mumuSetActiveMenuBarDisplay(new_did);
+		mumuPumpRunLoop(kMumuSpaceGestureProcessingDelay);
 
 		return 1;
 	}
@@ -572,11 +617,11 @@ int MimiFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid) {
 	if (count == 0) {
 		// Already on the correct local space on the target display. Make sure
 		// the menu bar is on the right display when crossing displays.
-		mimiPumpRunLoop(kMimiSpaceGestureProcessingDelay);
+		mumuPumpRunLoop(kMumuSpaceGestureProcessingDelay);
 
 		if (focusDisplay) {
-			mimiSetActiveMenuBarDisplay(new_did);
-			if (mimiDisplaySpaceID(new_did) != new_sid) {
+			mumuSetActiveMenuBarDisplay(new_did);
+			if (mumuDisplaySpaceID(new_did) != new_sid) {
 				CGEventRef clickDown = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, point, 0);
 				if (clickDown) {
 					CGEventPost(kCGHIDEventTap, clickDown);
@@ -600,27 +645,27 @@ int MimiFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid) {
 
 	double sign = (toIdx - fromIdx) > 0 ? 1.0 : -1.0;
 
-	CGEventSetIntegerValueField(event, kMimiCGSEventTypeField, kMimiCGSEventDockControl);
-	CGEventSetIntegerValueField(event, kMimiCGEventGestureHIDType, kMimiIOHIDEventTypeDockSwipe);
-	CGEventSetIntegerValueField(event, kMimiCGEventGestureSwipeMotion, kMimiCGGestureMotionHorizontal);
-	CGEventSetDoubleValueField(event, kMimiCGEventGestureSwipeProgress, sign);
-	CGEventSetDoubleValueField(event, kMimiCGEventGestureSwipeVelocityX, sign * 9999.0);
+	CGEventSetIntegerValueField(event, kMumuCGSEventTypeField, kMumuCGSEventDockControl);
+	CGEventSetIntegerValueField(event, kMumuCGEventGestureHIDType, kMumuIOHIDEventTypeDockSwipe);
+	CGEventSetIntegerValueField(event, kMumuCGEventGestureSwipeMotion, kMumuCGGestureMotionHorizontal);
+	CGEventSetDoubleValueField(event, kMumuCGEventGestureSwipeProgress, sign);
+	CGEventSetDoubleValueField(event, kMumuCGEventGestureSwipeVelocityX, sign * 9999.0);
 
 	for (int i = 0; i < count; i++) {
-		CGEventSetIntegerValueField(event, kMimiCGEventGesturePhase, kMimiCGSGesturePhaseBegan);
+		CGEventSetIntegerValueField(event, kMumuCGEventGesturePhase, kMumuCGSGesturePhaseBegan);
 		CGEventPost(kCGSessionEventTap, event);
-		CGEventSetIntegerValueField(event, kMimiCGEventGesturePhase, kMimiCGSGesturePhaseEnded);
+		CGEventSetIntegerValueField(event, kMumuCGEventGesturePhase, kMumuCGSGesturePhaseEnded);
 		CGEventPost(kCGSessionEventTap, event);
-		mimiPumpRunLoop(kMimiSpaceGestureProcessingDelay);
+		mumuPumpRunLoop(kMumuSpaceGestureProcessingDelay);
 	}
 
 	CFRelease(event);
 
-	mimiPumpRunLoop(kMimiSpaceGestureProcessingDelay * (CFTimeInterval)count + kMimiSpaceGestureProcessingDelay);
+	mumuPumpRunLoop(kMumuSpaceGestureProcessingDelay * (CFTimeInterval)count + kMumuSpaceGestureProcessingDelay);
 
 	if (focusDisplay) {
-		mimiSetActiveMenuBarDisplay(new_did);
-		if (mimiDisplaySpaceID(new_did) != new_sid) {
+		mumuSetActiveMenuBarDisplay(new_did);
+		if (mumuDisplaySpaceID(new_did) != new_sid) {
 			CGEventRef clickDown = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, point, 0);
 			if (clickDown) {
 				CGEventPost(kCGHIDEventTap, clickDown);
@@ -641,7 +686,7 @@ int MimiFocusSpaceUsingGesture(uint32_t new_did, uint64_t new_sid) {
 
 #pragma mark - Mach-O / Symbol Resolution Helpers
 
-static struct mach_header_64 *mimi_macho_find_image_header(const char *target_name, uint64_t *slide) {
+static struct mach_header_64 *mumu_macho_find_image_header(const char *target_name, uint64_t *slide) {
 	uint32_t image_count = _dyld_image_count();
 	for (uint32_t i = 0; i < image_count; ++i) {
 		const char *image_name = _dyld_get_image_name(i);
@@ -655,7 +700,7 @@ static struct mach_header_64 *mimi_macho_find_image_header(const char *target_na
 	return NULL;
 }
 
-static struct segment_command_64 *mimi_macho_find_linkedit_segment(struct mach_header_64 *header) {
+static struct segment_command_64 *mumu_macho_find_linkedit_segment(struct mach_header_64 *header) {
 	uint64_t offset = sizeof(struct mach_header_64);
 	for (uint32_t i = 0; i < header->ncmds; ++i) {
 		struct load_command *cmd = (struct load_command *)(((uint8_t *)header) + offset);
@@ -670,7 +715,7 @@ static struct segment_command_64 *mimi_macho_find_linkedit_segment(struct mach_h
 	return NULL;
 }
 
-static struct symtab_command *mimi_macho_find_symtab_command(struct mach_header_64 *header) {
+static struct symtab_command *mumu_macho_find_symtab_command(struct mach_header_64 *header) {
 	uint64_t offset = sizeof(struct mach_header_64);
 	for (uint32_t i = 0; i < header->ncmds; ++i) {
 		struct load_command *cmd = (struct load_command *)(((uint8_t *)header) + offset);
@@ -682,15 +727,15 @@ static struct symtab_command *mimi_macho_find_symtab_command(struct mach_header_
 	return NULL;
 }
 
-static void *mimi_macho_find_symbol(const char *target_image, const char *target_symbol) {
+static void *mumu_macho_find_symbol(const char *target_image, const char *target_symbol) {
 	uint64_t slide = 0;
-	struct mach_header_64 *header = mimi_macho_find_image_header(target_image, &slide);
+	struct mach_header_64 *header = mumu_macho_find_image_header(target_image, &slide);
 	if (!header)
 		return NULL;
-	struct segment_command_64 *linkedit_segment = mimi_macho_find_linkedit_segment(header);
+	struct segment_command_64 *linkedit_segment = mumu_macho_find_linkedit_segment(header);
 	if (!linkedit_segment)
 		return NULL;
-	struct symtab_command *symtab_command = mimi_macho_find_symtab_command(header);
+	struct symtab_command *symtab_command = mumu_macho_find_symtab_command(header);
 	if (!symtab_command)
 		return NULL;
 	uint32_t symbol_count = symtab_command->nsyms;
@@ -709,12 +754,12 @@ static void *mimi_macho_find_symbol(const char *target_image, const char *target
 #pragma mark - Public Display Helpers
 
 /// Return the display ID that currently contains the cursor.
-uint32_t MimiCursorDisplayID(void) { return mimiCursorDisplayID(); }
+uint32_t MumuCursorDisplayID(void) { return mumuCursorDisplayID(); }
 
 /// Activate a display by setting it as the active menu bar display.
 /// This keeps WindowServer's event routing state coherent when windows
 /// are moved across displays.
-void MimiActivateDisplay(uint32_t did) { mimiSetActiveMenuBarDisplay(did); }
+void MumuActivateDisplay(uint32_t did) { mumuSetActiveMenuBarDisplay(did); }
 
 #pragma mark - Window-to-Space Movement
 
@@ -726,16 +771,16 @@ void MimiActivateDisplay(uint32_t did) { mimiSetActiveMenuBarDisplay(did); }
 @end
 
 /// Shared implementation for moving a window (identified by its raw
-/// CGWindowID) to a Mission Control space. Used by both MimiMoveWindowToSpace
+/// CGWindowID) to a Mission Control space. Used by both MumuMoveWindowToSpace
 /// (which first resolves an AXUIElementRef to a CGWindowID) and
-/// MimiMoveWindowIDToSpace (which already has one, e.g. from
-/// MimiGetAllWindowsAcrossSpaces).
-static int mimiMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
+/// MumuMoveWindowIDToSpace (which already has one, e.g. from
+/// MumuGetAllWindowsAcrossSpaces).
+static int mumuMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
 	if (windowId == 0) {
 		return 0;
 	}
 
-	mimiEnsureApplication();
+	mumuEnsureApplication();
 
 	// Create CFArray of window ID
 	CFNumberRef windowNumber = CFNumberCreate(NULL, kCFNumberSInt32Type, &windowId);
@@ -754,7 +799,7 @@ static int mimiMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
 	static int64_t (*SLSPerformAsynchronousBridgedWindowManagementOperation)(void *) = NULL;
 	static dispatch_once_t onceToken;
 	dispatch_once(&onceToken, ^{
-		SLSPerformAsynchronousBridgedWindowManagementOperation = (int64_t (*)(void *))mimi_macho_find_symbol(
+		SLSPerformAsynchronousBridgedWindowManagementOperation = (int64_t (*)(void *))mumu_macho_find_symbol(
 		    "/System/Library/PrivateFrameworks/SkyLight.framework/Versions/A/SkyLight",
 		    "__"
 		    "ZL54SLSPerformAsynchronousBridgedWindowManagementOperationP47SLSAsynchronousBridgedWindowManagementOperati"
@@ -780,7 +825,7 @@ static int mimiMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
 		if (cgErr == kCGErrorSuccess) {
 			success = 1;
 		} else {
-			MIMI_LOG(
+			MUMU_LOG(
 			    "SLSMoveWindowsToManagedSpace failed with error %d (windowId=%u, spaceID=%llu)", (int)cgErr,
 			    (unsigned)windowId, (unsigned long long)spaceID);
 		}
@@ -789,13 +834,13 @@ static int mimiMoveCGWindowIDToSpace(CGWindowID windowId, uint64_t spaceID) {
 	CFRelease(windowList);
 
 	if (success) {
-		mimiPumpRunLoop(kMimiMoveWindowProcessingDelay);
+		mumuPumpRunLoop(kMumuMoveWindowProcessingDelay);
 	}
 
 	return success;
 }
 
-int MimiMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
+int MumuMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
 	if (!windowElement) {
 		return 0;
 	}
@@ -803,13 +848,13 @@ int MimiMoveWindowToSpace(void *windowElement, uint64_t spaceID) {
 	CGWindowID windowId = 0;
 	AXError err = _AXUIElementGetWindow((AXUIElementRef)windowElement, &windowId);
 	if (err != kAXErrorSuccess || windowId == 0) {
-		MIMI_LOG("_AXUIElementGetWindow failed with error %d (windowId=%u)", (int)err, (unsigned)windowId);
+		MUMU_LOG("_AXUIElementGetWindow failed with error %d (windowId=%u)", (int)err, (unsigned)windowId);
 		return 0;
 	}
 
-	return mimiMoveCGWindowIDToSpace(windowId, spaceID);
+	return mumuMoveCGWindowIDToSpace(windowId, spaceID);
 }
 
-int MimiMoveWindowIDToSpace(uint32_t windowID, uint64_t spaceID) {
-	return mimiMoveCGWindowIDToSpace((CGWindowID)windowID, spaceID);
+int MumuMoveWindowIDToSpace(uint32_t windowID, uint64_t spaceID) {
+	return mumuMoveCGWindowIDToSpace((CGWindowID)windowID, spaceID);
 }

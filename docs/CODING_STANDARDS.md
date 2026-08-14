@@ -1,6 +1,6 @@
-# Mimi Coding Standards
+# mumu Coding Standards
 
-This document defines the coding standards and conventions for the mimi project. Following these standards ensures the codebase appears written by a single developer and maintains consistency across all files.
+This document defines the coding standards and conventions for the mumu project. Following these standards ensures the codebase appears written by a single developer and maintains consistency across all files.
 
 ---
 
@@ -8,7 +8,6 @@ This document defines the coding standards and conventions for the mimi project.
 
 - [Quick Reference](#quick-reference)
 - [General Standards](#general-standards)
-- [Logging Standards](#logging-standards)
 - [Error Handling](#error-handling)
 - [Documentation Standards](#documentation-standards)
 - [Git Commit Standards](#git-commit-standards)
@@ -40,23 +39,17 @@ All files must follow these basic formatting rules (enforced by `.editorconfig`)
 ### File Organization
 
 ```
-mimi/
+mumu/
 ├── cmd/
-│   └── mimi/           # Application entry points
+│   └── mumu/           # Application entry point and CLI commands
 ├── internal/
-│   ├── config/         # Configuration management
-│   ├── daemon/         # Daemon lifecycle
 │   ├── errors/         # Structured error types
-│   ├── events/         # Event types + pub-sub bus
-│   ├── hooks/          # Hook registry + executor
-│   ├── logging/        # Structured logging
+│   ├── layout/         # Layout save/restore: capture, persistence, restore matching
 │   ├── native/         # Objective-C + CGO bridge
-│   ├── observe/        # Go-side event routing
-│   ├── action/         # CLI action dispatch
+│   ├── paths/          # Home-directory path expansion
 │   ├── window/         # AX window wrappers
 │   ├── space/          # Mission Control operations
-│   └── permissions/    # Accessibility permission checks
-├── configs/            # Embedded default config
+│   └── permissions/    # Accessibility and Screen Recording checks
 ├── docs/               # Documentation
 └── nix/                # Nix packaging
 ```
@@ -69,47 +62,21 @@ mimi/
 
 ---
 
-## Logging Standards
-
-### Logger
-
-Mimi uses `*zap.SugaredLogger` from `go.uber.org/zap`. Constructors that accept a logger should tolerate `nil` by falling back to `zap.NewNop()`.
-
-### Log Levels
-
-- `debug`: High-volume diagnostic info — event routing, window polling cycles, AX observer installs
-- `info`: Daemon lifecycle — startup, shutdown, config load, mode activation
-- `warn`: Actionable degradation — missing accessibility permission, config reload failure
-- `error`: Failed operations — include `zap.Error(err)` and relevant context
-
-### Fields
-
-Prefer structured fields over interpolated messages:
-
-```go
-logger.Warnw("config reload failed", "err", err)
-logger.Infow("event", "kind", evt.Kind, "app", evt.AppName)
-```
-
-Do not log sensitive or unbounded payloads — log counts, lengths, IDs, booleans, and durations instead.
-
----
-
 ## Error Handling
 
 Use the `derrors` package for structured errors:
 
 ```go
-import derrors "github.com/y3owk1n/mimi/internal/errors"
+import derrors "github.com/adonh/mumu/internal/errors"
 
 // Create new error
 return derrors.New(derrors.CodeInternal, "something went wrong")
 
 // Wrap existing error
-return derrors.Wrapf(err, derrors.CodeConfigIOFailed, "reading config")
+return derrors.Wrapf(err, derrors.CodeSerializationFailed, "encoding layout")
 ```
 
-Available error codes: `CodeAccessibilityDenied`, `CodeAccessibilityFailed`, `CodeInvalidConfig`, `CodeInvalidInput`, `CodeActionFailed`, `CodeContextCanceled`, `CodeTimeout`, `CodeInternal`, `CodeLoggingFailed`, `CodeConfigIOFailed`, `CodeSerializationFailed`, `CodeBridgeFailed`, `CodeNotSupported`.
+Available error codes: `CodeAccessibilityDenied`, `CodeAccessibilityFailed`, `CodeScreenRecordingDenied`, `CodeInvalidInput`, `CodeActionFailed`, `CodeContextCanceled`, `CodeTimeout`, `CodeInternal`, `CodeSerializationFailed`, `CodeBridgeFailed`, `CodeNotSupported`.
 
 ---
 

@@ -1,6 +1,6 @@
-# Contributing to mimi
+# Contributing to mumu
 
-Thanks for your interest in contributing! mimi is a macOS window and space utility with an approachable codebase. We welcome contributions of all kinds — code, docs, bug reports, config examples, or ideas.
+Thanks for your interest in contributing! mumu is a macOS window-to-Space layout tool with an approachable, layout-only codebase. We welcome contributions of all kinds — code, docs, bug reports, or ideas.
 
 ---
 
@@ -22,7 +22,7 @@ Thanks for your interest in contributing! mimi is a macOS window and space utili
 
 ## Code of Conduct
 
-This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to uphold it. Please report unacceptable behavior via [GitHub Issues](https://github.com/y3owk1n/mimi/issues) or by contacting [@y3owk1n](https://github.com/y3owk1n) directly.
+This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to uphold it. Please report unacceptable behavior via [GitHub Issues](https://github.com/adonh/mumu/issues) or by contacting [@adonh](https://github.com/adonh) directly.
 
 ---
 
@@ -46,8 +46,8 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating
 ### Clone & Verify
 
 ```bash
-git clone https://github.com/y3owk1n/mimi.git
-cd mimi
+git clone https://github.com/adonh/mumu.git
+cd mumu
 go version          # Should be 1.26+
 just --version
 golangci-lint --version
@@ -114,16 +114,16 @@ We use [Conventional Commits](https://www.conventionalcommits.org/).
 **Examples:**
 
 ```
-feat(events): add battery critical event
-fix(workspace): correct window count in space polling
-docs: update configuration reference for workspace events
+feat(layout): support restoring across mismatched display counts
+fix(restore): correct positional fallback when titles are blank
+docs: clarify space numbering in the CLI guide
 ```
 
 ---
 
 ## Pull Requests
 
-- **Title** should follow the same conventional commit format (e.g. `feat(action): add space count command`).
+- **Title** should follow the same conventional commit format (e.g. `feat(layout): add app sort order`).
 - **Description** should explain _what_ changed and _why_.
 - **Keep PRs focused** — one logical change per PR.
 - **Link related issues** (e.g. `Closes #123`).
@@ -134,7 +134,7 @@ docs: update configuration reference for workspace events
 
 ## Testing
 
-mimi separates tests into unit and integration tests:
+mumu separates tests into unit and integration tests:
 
 | Type              | File pattern            | Command                 | Build tag     |
 | ----------------- | ----------------------- | ----------------------- | ------------- |
@@ -168,24 +168,21 @@ All code must follow the [Coding Standards](docs/CODING_STANDARDS.md):
 
 Not sure where to start? These are great entry points:
 
-- 🐛 Bug fixes — check [open issues](https://github.com/y3owk1n/mimi/issues)
+- 🐛 Bug fixes — check [open issues](https://github.com/adonh/mumu/issues)
 - 📝 Documentation improvements or typo fixes
-- 📦 Config examples for common setups
 - ⚡ Performance improvements
 - 🧪 Additional test coverage
-- 🆕 New event observers (e.g. printer, camera, location)
 
 ---
 
 ## Reporting Bugs
 
-Open a [GitHub Issue](https://github.com/y3owk1n/mimi/issues/new) with:
+Open a [GitHub Issue](https://github.com/adonh/mumu/issues/new) with:
 
-1. **macOS version** and **mimi version** (`mimi --version`).
+1. **macOS version** and **mumu version** (`mumu --version`).
 2. **Steps to reproduce** — minimal and specific.
 3. **Expected vs actual behavior**.
-4. **Logs** — run with `log_level = "debug"` and attach relevant lines from the log (default: stdout, or `~/.local/share/mimi/mimi.log` if `log_file` is configured).
-5. **Config file** (anonymize if needed).
+4. **Output of `mumu status`** — confirms whether this is a permissions issue.
 
 See also: [Troubleshooting Guide](docs/TROUBLESHOOTING.md) and [Security Policy](SECURITY.md) (for vulnerability reports).
 
@@ -193,7 +190,7 @@ See also: [Troubleshooting Guide](docs/TROUBLESHOOTING.md) and [Security Policy]
 
 ## Feature Requests
 
-Open a [GitHub Issue](https://github.com/y3owk1n/mimi/issues/new) or start a [Discussion](https://github.com/y3owk1n/mimi/discussions) describing:
+Open a [GitHub Issue](https://github.com/adonh/mumu/issues/new) or start a [Discussion](https://github.com/adonh/mumu/discussions) describing:
 
 - **What** you'd like to see.
 - **Why** it would be useful (your use case).
@@ -201,4 +198,4 @@ Open a [GitHub Issue](https://github.com/y3owk1n/mimi/issues/new) or start a [Di
 
 ---
 
-Thank you for helping make mimi better!
+Thank you for helping make mumu better!

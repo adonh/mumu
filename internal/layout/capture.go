@@ -3,10 +3,10 @@ package layout
 import (
 	"time"
 
-	derrors "github.com/y3owk1n/mimi/internal/errors"
-	"github.com/y3owk1n/mimi/internal/permissions"
-	"github.com/y3owk1n/mimi/internal/space"
-	"github.com/y3owk1n/mimi/internal/window"
+	derrors "github.com/adonh/mumu/internal/errors"
+	"github.com/adonh/mumu/internal/permissions"
+	"github.com/adonh/mumu/internal/space"
+	"github.com/adonh/mumu/internal/window"
 )
 
 // CaptureSummary reports counts from a Capture call.
@@ -16,7 +16,7 @@ type CaptureSummary struct {
 }
 
 func ensureLayoutPermissions() error {
-	return permissions.FriendlyErrorLayout(permissions.CheckLayout())
+	return permissions.FriendlyError(permissions.Check())
 }
 
 // Capture records the current assignment of application windows to Mission

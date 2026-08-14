@@ -16,19 +16,19 @@
 }:
 if useZip then
   let
-    appName = "Mimi.app";
+    appName = "Mumu.app";
 
     # Determine architecture-specific details
     archInfo =
       {
         "aarch64-darwin" = {
-          url = "https://github.com/y3owk1n/mimi/releases/download/v${version}/mimi-darwin-arm64.zip";
-          # run `nix hash convert --hash-algo sha256 (nix-prefetch-url https://github.com/y3owk1n/mimi/releases/download/v0.9.2/mimi-darwin-arm64.zip)`
+          url = "https://github.com/adonh/mumu/releases/download/v${version}/mumu-darwin-arm64.zip";
+          # run `nix hash convert --hash-algo sha256 (nix-prefetch-url https://github.com/adonh/mumu/releases/download/v0.1.0/mumu-darwin-arm64.zip)`
           sha256 = "sha256-3+eQ1htkTXra+n28TuNZ6FwZhgWi2j4DpQ5UybQiIhE=";
         };
         "x86_64-darwin" = {
-          url = "https://github.com/y3owk1n/mimi/releases/download/v${version}/mimi-darwin-amd64.zip";
-          # run `nix hash convert --hash-algo sha256 (nix-prefetch-url https://github.com/y3owk1n/mimi/releases/download/v0.9.2/mimi-darwin-amd64.zip)`
+          url = "https://github.com/adonh/mumu/releases/download/v${version}/mumu-darwin-amd64.zip";
+          # run `nix hash convert --hash-algo sha256 (nix-prefetch-url https://github.com/adonh/mumu/releases/download/v0.1.0/mumu-darwin-amd64.zip)`
           sha256 = "sha256-jky8NfaIUTFKftbN0wFBj3VsCJYpDPGHV7BOW+zHLKM=";
         };
       }
@@ -36,7 +36,7 @@ if useZip then
 
   in
   stdenv.mkDerivation {
-    pname = "mimi";
+    pname = "mumu";
 
     inherit version;
 
@@ -68,7 +68,7 @@ if useZip then
         else
           ''
             mkdir -p $out/bin
-            mv bin/mimi $out/bin/mimi
+            mv bin/mumu $out/bin/mumu
             mkdir -p $out/share/man/man1
             mv share/man/man1/*.1 $out/share/man/man1/
           ''
@@ -82,10 +82,10 @@ if useZip then
           stdenv.buildPlatform.canExecute stdenv.hostPlatform && stdenv.hostPlatform.isDarwin
         )
       }; then
-        installShellCompletion --cmd mimi \
-              --bash <($out/Applications/Mimi.app/Contents/MacOS/mimi completion bash) \
-              --fish <($out/Applications/Mimi.app/Contents/MacOS/mimi completion fish) \
-              --zsh <($out/Applications/Mimi.app/Contents/MacOS/mimi completion zsh)
+        installShellCompletion --cmd mumu \
+              --bash <($out/Applications/Mumu.app/Contents/MacOS/mumu completion bash) \
+              --fish <($out/Applications/Mumu.app/Contents/MacOS/mumu completion fish) \
+              --zsh <($out/Applications/Mumu.app/Contents/MacOS/mumu completion zsh)
       fi
     '';
 
@@ -95,16 +95,16 @@ if useZip then
     ];
 
     passthru.updateScript = gitUpdater {
-      url = "https://github.com/y3owk1n/mimi.git";
+      url = "https://github.com/adonh/mumu.git";
       rev-prefix = "v";
     };
 
     meta = with lib; {
-      description = "macOS window and space utility";
-      homepage = "https://github.com/y3owk1n/mimi";
+      description = "Save and restore window-to-Space layouts on macOS";
+      homepage = "https://github.com/adonh/mumu";
       license = licenses.mit;
       platforms = platforms.darwin;
-      mainProgram = "mimi";
+      mainProgram = "mumu";
     };
   }
 else
@@ -115,7 +115,7 @@ else
   in
   # Build from source
   buildGoModule (finalAttrs: {
-    pname = "mimi";
+    pname = "mumu";
     version = pversion;
 
     src = lib.cleanSource ../.;
@@ -129,13 +129,13 @@ else
     ldflags = [
       "-s"
       "-w"
-      "-X github.com/y3owk1n/mimi/cmd/mimi/cmd.Version=${finalAttrs.version}"
+      "-X github.com/adonh/mumu/cmd/mumu/cmd.Version=${finalAttrs.version}"
     ]
     ++ lib.optionals (commitHash != null) [
-      "-X github.com/y3owk1n/mimi/cmd/mimi/cmd.GitCommit=${commitHash}"
+      "-X github.com/adonh/mumu/cmd/mumu/cmd.GitCommit=${commitHash}"
     ];
 
-    subPackages = [ "cmd/mimi" ];
+    subPackages = [ "cmd/mumu" ];
 
     nativeBuildInputs = [
       installShellFiles
@@ -158,26 +158,26 @@ else
 
       # install shell completions
       if ${lib.boolToString (stdenv.buildPlatform.canExecute stdenv.hostPlatform)}; then
-      	installShellCompletion --cmd mimi \
-      	--bash <($out/bin/mimi completion bash) \
-      	--fish <($out/bin/mimi completion fish) \
-      	--zsh <($out/bin/mimi completion zsh)
+      	installShellCompletion --cmd mumu \
+      	--bash <($out/bin/mumu completion bash) \
+      	--fish <($out/bin/mumu completion fish) \
+      	--zsh <($out/bin/mumu completion zsh)
       fi
     ''
     + lib.optionalString stdenv.hostPlatform.isDarwin ''
       # Create a simple .app bundle on the fly for macOS source builds.
-      mkdir -p $out/Applications/Mimi.app/Contents/{MacOS,Resources}
+      mkdir -p $out/Applications/Mumu.app/Contents/{MacOS,Resources}
 
-      cp $out/bin/mimi $out/Applications/Mimi.app/Contents/MacOS/mimi
+      cp $out/bin/mumu $out/Applications/Mumu.app/Contents/MacOS/mumu
 
-      # cp ${finalAttrs.src}/resources/icon.icns $out/Applications/Mimi.app/Contents/Resources/icon.icns
-      cp ${finalAttrs.src}/resources/Mimi.entitlements $out/Applications/Mimi.app/Contents/Resources/Mimi.entitlements
+      # cp ${finalAttrs.src}/resources/icon.icns $out/Applications/Mumu.app/Contents/Resources/icon.icns
+      cp ${finalAttrs.src}/resources/Mumu.entitlements $out/Applications/Mumu.app/Contents/Resources/Mumu.entitlements
 
       SRC_PLIST=${finalAttrs.src}/resources/Info.plist.template
 
-      sed "s|VERSION|${finalAttrs.version}|g" $SRC_PLIST > $out/Applications/Mimi.app/Contents/Info.plist
+      sed "s|VERSION|${finalAttrs.version}|g" $SRC_PLIST > $out/Applications/Mumu.app/Contents/Info.plist
 
-      echo "✅ Mimi.app bundle created at $out/Applications/Mimi.app"
+      echo "✅ Mumu.app bundle created at $out/Applications/Mumu.app"
     '';
 
     passthru = {
@@ -185,10 +185,10 @@ else
     };
 
     meta = with lib; {
-      description = "macOS window and space utility";
-      homepage = "https://github.com/y3owk1n/mimi";
+      description = "Save and restore window-to-Space layouts on macOS";
+      homepage = "https://github.com/adonh/mumu";
       license = licenses.mit;
       platforms = platforms.darwin;
-      mainProgram = "mimi";
+      mainProgram = "mumu";
     };
   })

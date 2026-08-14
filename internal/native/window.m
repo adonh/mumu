@@ -1,15 +1,15 @@
 //
 //  window.m
-//  mimi
+//  mumu
 //
 
-#import "mimi.h"
-#import "mimi_log.h"
+#import "mumu.h"
+#import "mumu_log.h"
 
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
 
-static NSSet<NSNumber *> *mimiVisibleRegularAppPIDs(void) {
+static NSSet<NSNumber *> *mumuVisibleRegularAppPIDs(void) {
 	CFArrayRef windowList = CGWindowListCopyWindowInfo(
 	    kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
 	if (!windowList)
@@ -45,9 +45,9 @@ static NSSet<NSNumber *> *mimiVisibleRegularAppPIDs(void) {
 	return [pids copy];
 }
 
-void *MimiGetFrontmostWindow(void) {
+void *MumuGetFrontmostWindow(void) {
 	@autoreleasepool {
-		AXUIElementRef focusedApp = (AXUIElementRef)MimiGetFocusedApplication();
+		AXUIElementRef focusedApp = (AXUIElementRef)MumuGetFocusedApplication();
 		AXUIElementRef appRef = focusedApp;
 		bool shouldReleaseAppRef = false;
 
@@ -152,7 +152,7 @@ static CGPoint getWindowPosition(AXUIElementRef window) {
 // space. On success, sets *outCount to the number of windows and (if
 // requested) *outFocusedIndex to the 0-based index of the focused window, or
 // -1 if no window is focused / none matches.
-static CFArrayRef mimiCollectFocusableWindowsOnActiveSpace(int *outCount, int *outFocusedIndex) {
+static CFArrayRef mumuCollectFocusableWindowsOnActiveSpace(int *outCount, int *outFocusedIndex) {
 	if (!outCount)
 		return NULL;
 
@@ -161,7 +161,7 @@ static CFArrayRef mimiCollectFocusableWindowsOnActiveSpace(int *outCount, int *o
 		if (outFocusedIndex)
 			*outFocusedIndex = -1;
 
-		NSSet<NSNumber *> *visiblePIDs = mimiVisibleRegularAppPIDs();
+		NSSet<NSNumber *> *visiblePIDs = mumuVisibleRegularAppPIDs();
 		NSArray *runningApps = [[NSWorkspace sharedWorkspace].runningApplications
 		    sortedArrayUsingComparator:^NSComparisonResult(NSRunningApplication *obj1, NSRunningApplication *obj2) {
 			    if (obj1.processIdentifier < obj2.processIdentifier) {
@@ -177,11 +177,11 @@ static CFArrayRef mimiCollectFocusableWindowsOnActiveSpace(int *outCount, int *o
 
 		// Track the focused window in app-element form so we can match it
 		// against the collected list in a single pass after enumeration.
-		// Uses CFEqual (via MimiAreElementsEqual) for matching since
+		// Uses CFEqual (via MumuAreElementsEqual) for matching since
 		// AXUIElementRef equality is based on the underlying CFType, not
 		// pointer identity.
 		AXUIElementRef focusedWindow = NULL;
-		AXUIElementRef focusedApp = (AXUIElementRef)MimiGetFocusedApplication();
+		AXUIElementRef focusedApp = (AXUIElementRef)MumuGetFocusedApplication();
 		if (focusedApp) {
 			CFTypeRef focusedVal = NULL;
 			if (AXUIElementCopyAttributeValue(focusedApp, kAXFocusedWindowAttribute, &focusedVal) == kAXErrorSuccess &&
@@ -310,18 +310,14 @@ static CFArrayRef mimiCollectFocusableWindowsOnActiveSpace(int *outCount, int *o
 	}
 }
 
-void **MimiGetAllFocusableWindowsOnActiveSpace(int *count) {
-	return MimiGetAllFocusableWindowsOnActiveSpaceWithFocused(count, NULL);
-}
-
-void **MimiGetAllFocusableWindowsOnActiveSpaceWithFocused(int *count, int *focusedIndex) {
+void **MumuGetAllFocusableWindowsOnActiveSpaceWithFocused(int *count, int *focusedIndex) {
 	if (!count)
 		return NULL;
 	if (focusedIndex)
 		*focusedIndex = -1;
 
 	@autoreleasepool {
-		CFArrayRef windowsCollector = mimiCollectFocusableWindowsOnActiveSpace(count, focusedIndex);
+		CFArrayRef windowsCollector = mumuCollectFocusableWindowsOnActiveSpace(count, focusedIndex);
 		if (!windowsCollector)
 			return NULL;
 
@@ -406,7 +402,7 @@ void **MimiGetAllFocusableWindowsOnActiveSpaceWithFocused(int *count, int *focus
 	}
 }
 
-double *MimiGetWindowFrame(void *window) {
+double *MumuGetWindowFrame(void *window) {
 	if (!window)
 		return NULL;
 
@@ -448,7 +444,7 @@ double *MimiGetWindowFrame(void *window) {
 	}
 }
 
-int MimiSetWindowFrame(void *window, double x, double y, double w, double h) {
+int MumuSetWindowFrame(void *window, double x, double y, double w, double h) {
 	if (!window)
 		return 0;
 
@@ -463,7 +459,7 @@ int MimiSetWindowFrame(void *window, double x, double y, double w, double h) {
 
 		AXError posError = AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute, positionValue);
 		if (posError != kAXErrorSuccess) {
-			MIMI_LOG("AXUIElementSetAttributeValue(kAXPositionAttribute) failed with error %d", (int)posError);
+			MUMU_LOG("AXUIElementSetAttributeValue(kAXPositionAttribute) failed with error %d", (int)posError);
 		}
 
 		// Then set size
@@ -476,13 +472,13 @@ int MimiSetWindowFrame(void *window, double x, double y, double w, double h) {
 
 		AXError sizeError = AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute, sizeValue);
 		if (sizeError != kAXErrorSuccess) {
-			MIMI_LOG("AXUIElementSetAttributeValue(kAXSizeAttribute) failed with error %d", (int)sizeError);
+			MUMU_LOG("AXUIElementSetAttributeValue(kAXSizeAttribute) failed with error %d", (int)sizeError);
 		}
 
 		// Re-set position to correct any shifts caused by resize
 		AXError posResetError = AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute, positionValue);
 		if (posResetError != kAXErrorSuccess) {
-			MIMI_LOG(
+			MUMU_LOG(
 			    "AXUIElementSetAttributeValue(kAXPositionAttribute) reset failed with error %d", (int)posResetError);
 		}
 
@@ -493,7 +489,7 @@ int MimiSetWindowFrame(void *window, double x, double y, double w, double h) {
 	}
 }
 
-int MimiActivateWindow(void *window) {
+int MumuActivateWindow(void *window) {
 	if (!window)
 		return 0;
 
@@ -512,17 +508,17 @@ int MimiActivateWindow(void *window) {
 
 		AXError mainErr = AXUIElementSetAttributeValue(axWindow, kAXMainAttribute, kCFBooleanTrue);
 		if (mainErr != kAXErrorSuccess) {
-			MIMI_LOG("AXUIElementSetAttributeValue(kAXMainAttribute) failed with error %d (pid=%d)", (int)mainErr, pid);
+			MUMU_LOG("AXUIElementSetAttributeValue(kAXMainAttribute) failed with error %d (pid=%d)", (int)mainErr, pid);
 		}
 		AXError focusErr = AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute, kCFBooleanTrue);
 		if (focusErr != kAXErrorSuccess) {
-			MIMI_LOG(
+			MUMU_LOG(
 			    "AXUIElementSetAttributeValue(kAXFocusedAttribute) failed with error %d (pid=%d)", (int)focusErr, pid);
 		}
 
 		AXError raiseError = AXUIElementPerformAction(axWindow, kAXRaiseAction);
 		if (raiseError != kAXErrorSuccess) {
-			MIMI_LOG("AXUIElementPerformAction(kAXRaiseAction) failed with error %d (pid=%d)", (int)raiseError, pid);
+			MUMU_LOG("AXUIElementPerformAction(kAXRaiseAction) failed with error %d (pid=%d)", (int)raiseError, pid);
 		}
 
 		return (raiseError == kAXErrorSuccess) ? 1 : 0;

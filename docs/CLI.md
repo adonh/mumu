@@ -1,268 +1,115 @@
 # CLI Usage
 
-mimi is a macOS window and space utility. Use `mimi action` for immediate commands, or `mimi start` to run the hook daemon.
+`mumu` saves and restores window-to-Space layouts on macOS. All commands are top-level — there is no subcommand grouping.
 
 ---
 
 ## Table of Contents
 
 - [Global Flags](#global-flags)
-- [Window & Space Actions](#window--space-actions)
-- [Layout Save/Restore](#layout-saverestore)
-- [Hook Daemon](#hook-daemon)
-- [Service Management](#service-management)
-- [Configuration Management](#configuration-management)
+- [Space Numbering](#space-numbering)
+- [Output Ordering (`--sort`)](#output-ordering---sort)
+- [`mumu save`](#mumu-save)
+- [`mumu restore`](#mumu-restore---yes---sort-displaymacosapp)
+- [`mumu list`](#mumu-list)
+- [`mumu show`](#mumu-show-display-count---sort-displaymacosapp)
+- [`mumu delete`](#mumu-delete-display-count)
+- [`mumu status`](#mumu-status)
+- [Limitations](#limitations)
 
 ---
 
 ## Global Flags
 
-| Flag            | Shorthand | Default | Description            |
-| --------------- | --------- | ------- | ---------------------- |
-| `--config, -c`  |           | auto    | Path to config file    |
-| `--verbose, -v` |           | `false` | Verbose output         |
-| `--version`     |           |         | Print version and exit |
+| Flag        | Description             |
+| ----------- | ------------------------ |
+| `--version` | Print version and exit   |
+| `--help`    | Show help for any command |
 
 ---
 
-## Window & Space Actions
+## Space Numbering
 
-These commands run directly in the CLI process when the daemon is not running. When the daemon **is** running, mimi routes actions over its Unix socket (`settings.socket_file`, default `~/.local/share/mimi/mimi.sock`) so hotkeys feel instant. **Accessibility permission is required.**
+`mumu`'s own ordinal (shown as `#3`, `#21`, etc.) is counted **left to right across all connected displays**, independent of which display is primary — matching how a person visually counts Spaces on screen.
 
-```bash
-mimi action focus_window
-mimi action focus_window --backward
-mimi action focus_window --left
-mimi action focus_window --right
-mimi action focus_window --up
-mimi action focus_window --down
-mimi action space 1
-mimi action space next
-mimi action space prev
-mimi action move_window_to_space 2
-mimi action move_window_to_space next
-mimi action move_window_to_space prev
-mimi action resize_window left-half
-mimi action resize_window center --width-percent 80 --height-percent 90
-mimi action resize_window --width 1024 --height 768 --anchor cc
-```
+Because this can diverge from macOS's own Mission Control ordering whenever the primary display isn't the leftmost one, any output that names a specific window's Space (`show`, restore's per-window progress, and its skip summary) shows both numbers together, e.g. `#03 (space 21)` — mumu's own ordinal first, then the macOS Mission Control Space number in parentheses, which is the same ordinal macOS's own "Switch to Desktop `<n>`" keyboard shortcut uses. The Mission Control number is resolved fresh against the current display arrangement each time it's printed, so it always reflects what's true right now (it's never saved to the layout file).
 
-### `mimi action focus_window`
+## Output ordering (`--sort`)
 
-Cycle keyboard focus through all focusable windows on the current space, or move focus spatially with direction flags.
+`mumu show` and `mumu restore` both accept `--sort <display|macos|app>`, controlling the order per-window entries print in (and, for `restore`, the order windows are actually moved in — it has no effect on _which_ windows get matched, moved, or skipped):
 
-| Flag         | Description                                                      |
-| ------------ | ---------------------------------------------------------------- |
-| `--backward` | Cycle to the previous window instead of the next                 |
-| `--up`       | Move focus to the nearest window above the current one           |
-| `--down`     | Move focus to the nearest window below the current one           |
-| `--left`     | Move focus to the nearest window to the left of the current one  |
-| `--right`    | Move focus to the nearest window to the right of the current one |
+- `display` (default): logical left-to-right Space number, ascending.
+- `macos`: macOS Mission Control Space number, ascending.
+- `app`: bundle identifier, ascending (alphabetical), grouping all of one application's windows together. mumu has no captured or resolvable human-readable app display name, so this sorts by the raw bundle ID string (e.g. `com.apple.Safari`), not a "friendly" app name.
 
-### `mimi action space <number|next|prev>`
-
-Focus a Mission Control space by its 1-based index, or cycle to the next/previous space with wrapping. Uses a synthetic dock-swipe gesture (no public macOS API exists for direct space switching).
-
-### `mimi action move_window_to_space <number|next|prev>`
-
-Move the frontmost window to a space by its 1-based index, or cycle to the next/previous space with wrapping. Uses private SkyLight APIs; does not require disabling SIP.
-
-### `mimi action resize_window [preset] [flags]`
-
-Resize and reposition the frontmost window using presets or custom flags. Respects the macOS tiled window margins setting (`com.apple.WindowManager.EnableTiledWindowMargins`), applying full margins on screen-facing edges and half margins on internal (split) edges.
-
-**Presets** provide quick tiling layouts:
-
-| Preset         | Effect                               |
-| -------------- | ------------------------------------ |
-| `left-half`    | Fill the left half of the screen     |
-| `right-half`   | Fill the right half of the screen    |
-| `top-half`     | Fill the top half of the screen      |
-| `bottom-half`  | Fill the bottom half of the screen   |
-| `top-left`     | Fill the top-left quadrant           |
-| `top-right`    | Fill the top-right quadrant          |
-| `bottom-left`  | Fill the bottom-left quadrant        |
-| `bottom-right` | Fill the bottom-right quadrant       |
-| `center`       | Center window at 60% × 80% of screen |
-| `fill`         | Fill entire screen                   |
-
-**Custom sizing flags:**
-
-| Flag                     | Description                            |
-| ------------------------ | -------------------------------------- |
-| `--width, -w <pixels>`   | Absolute window width in points        |
-| `--height, -h <pixels>`  | Absolute window height in points       |
-| `--width-percent <pct>`  | Width as percentage of screen (0–100)  |
-| `--height-percent <pct>` | Height as percentage of screen (0–100) |
-
-**Positioning flags** (use anchors to align the window):
-
-| Flag           | Description              |
-| -------------- | ------------------------ |
-| `--x <pixels>` | Absolute X position      |
-| `--y <pixels>` | Absolute Y position      |
-| `--anchor, -a` | Anchor point (see below) |
-
-**Anchor system** places the window's anchor point at the computed or specified position. Valid anchors (use 2 letters: vertical + horizontal):
-
-```
-tl  tc  tr       (top-left, top-center, top-right)
-cl  cc  cr       (center-left, center-center, center-right)
-bl  bc  br       (bottom-left, bottom-center, bottom-right)
-```
-
-**Margin control:**
-
-| Flag          | Effect                                          |
-| ------------- | ----------------------------------------------- |
-| `--margin`    | Enable tiled margins (overrides system setting) |
-| `--no-margin` | Disable tiled margins                           |
-
-**Examples:**
-
-```bash
-# Presets
-mimi action resize_window left-half
-mimi action resize_window right-half
-mimi action resize_window top-left
-mimi action resize_window center
-
-# Fixed dimensions, centered
-mimi action resize_window --width 800 --height 600 --anchor cc
-
-# Percentage of screen, top-left
-mimi action resize_window --width-percent 50 --height-percent 75 --anchor tl
-
-# Absolute position, top-left anchor
-mimi action resize_window --width 1024 --height 768 --x 100 --y 50 --anchor tl
-
-# Override margins for a preset
-mimi action resize_window left-half --no-margin
-
-# Mix preset with custom size
-mimi action resize_window center --width-percent 80 --height-percent 90
-```
+Whichever key is primary, entries that tie on it are ordered by falling back through the other two keys, in the fixed priority Space number, then bundle identifier, then window title — so output is always fully deterministic. This ordering applies to `show`'s entry list, restore's per-window move progress lines, and the ordering of entries within each reason group of restore's skip summary.
 
 ---
 
-## Layout Save/Restore
+## `mumu save`
 
-`mimi layout` saves and restores the assignment of application windows to Mission Control spaces, keyed by the number of currently connected displays. **Requires both Accessibility and Screen Recording permissions** — Screen Recording is needed to read window titles reliably (see [Limitations](#limitations) below); no other mimi command requires it.
+Captures, for every non-fullscreen window on every Space across all connected displays, its owning application's bundle identifier, window title, and logical (left-to-right) Space number. Persists the result keyed by the current display count, overwriting any previous save for that same count. Prints a status line before scanning starts, since enumerating windows can take a moment.
 
 ```bash
-mimi layout save
-mimi layout restore
-mimi layout restore --yes
-mimi layout list
-mimi layout show
-mimi layout show 2
-mimi layout delete
-mimi layout delete 2
+mumu save
 ```
 
-### Space numbering
+## `mumu restore [--yes] [--sort display|macos|app]`
 
-Space numbers used by `mimi layout` are counted **left to right across all connected displays**, independent of which display is primary — matching how a person visually counts spaces on screen. This is a separate numbering from `mimi action space`'s Mission Control ordering (which always lists the primary display's spaces first) and does not affect it.
+Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
 
-### `mimi layout save`
+If the current per-display Space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
 
-Captures, for every non-fullscreen window on every space across all connected displays, its owning application's bundle identifier, window title, and logical (left-to-right) space number. Persists the result keyed by the current display count, overwriting any previous save for that same count. Prints a status line before scanning starts, since enumerating windows can take a moment.
+```bash
+mumu restore
+mumu restore --yes
+mumu restore --sort macos
+```
 
-### `mimi layout restore [--yes]`
+Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (target Space — both numbers, see [Space Numbering](#space-numbering) — then bundle ID and title) so it's never a silent pause. Windows are moved, and progress lines printed, in the order set by `--sort` (default: display-sequence order). Afterward, any skipped entries are listed grouped by reason — each group also ordered by `--sort` — each showing the bundle ID, title, and saved Space, including the specific windows that couldn't be matched to a currently open window.
 
-Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded space. Applications that aren't running are skipped (never launched). Windows are matched by exact title first, falling back to positional order within the same app; if exactly one of an app's windows remains unmatched after that, it's used regardless of title or position — there's no real ambiguity left once only one candidate remains, which matters for apps like browsers whose titles rarely match exactly across save and restore. Never creates or removes spaces — entries whose target space no longer exists are skipped and reported.
-
-If the current per-display space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
-
-Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (bundle ID, title, and target space) so it's never a silent pause. Afterward, any skipped entries are listed grouped by reason, each showing the bundle ID, title, and saved space — including the specific windows that couldn't be matched to a currently open window.
-
-### `mimi layout list`
+## `mumu list`
 
 Lists every saved layout with its display count, window count, and save timestamp.
 
-### `mimi layout show [display-count]`
+```bash
+mumu list
+```
 
-Prints a saved layout's window entries (space number, bundle ID, title) without moving anything. Defaults to the layout for the current display count.
+## `mumu show [display-count] [--sort display|macos|app]`
 
-### `mimi layout delete [display-count]`
+Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order).
+
+```bash
+mumu show
+mumu show 2
+mumu show --sort app
+```
+
+## `mumu delete [display-count]`
 
 Deletes the saved layout for the given display count (default: current display count).
 
-### Limitations
+```bash
+mumu delete
+mumu delete 2
+```
+
+## `mumu status`
+
+Reports whether Accessibility and Screen Recording permission are currently granted. Makes no changes to any window, Space, or saved layout.
+
+```bash
+mumu status
+```
+
+---
+
+## Limitations
 
 - **Reflow-only**: applications that have quit since save time are skipped and reported, never relaunched. This is not a full session restore.
-- **No window geometry**: only space assignment is saved — position and size are never captured or restored.
+- **No window geometry**: only Space assignment is saved — position and size are never captured or restored.
 - **Fullscreen windows are excluded** entirely, both at save and restore.
-- **Minimized-window detection is best-effort**: a minimized window on the space currently displayed on its screen is correctly excluded, but a minimized window on a space that isn't currently displayed on any screen may still be captured and restored as if it weren't minimized — there's no reliable per-window signal for that case.
-- **Manual only**: layout save/restore only happens when you run these commands directly. It's never triggered automatically by the hook daemon, on a schedule, or at login.
-
----
-
-## Hook Daemon
-
-### `mimi start`
-
-Start the background daemon that watches window and space events and runs your hooks.
-
-```bash
-mimi start
-mimi start -c /path/to/config.toml
-```
-
-On first run without a config file, mimi offers to create one.
-
-### `mimi stop`
-
-Stop the running daemon via SIGTERM.
-
-```bash
-mimi stop
-```
-
-### `mimi status`
-
-Show whether the daemon is running, whether Accessibility and Screen Recording permissions are granted, and whether the IPC socket is available. Screen Recording is only required by `mimi layout`.
-
-```bash
-mimi status
-```
-
----
-
-## Service Management
-
-### `mimi services install`
-
-Install mimi as a launchd user agent for automatic startup at login.
-
-```bash
-mimi services install
-```
-
-### `mimi services uninstall`
-
-Remove the launchd agent.
-
-### `mimi services start` / `stop` / `restart` / `status`
-
-Control the launchd service directly.
-
----
-
-## Configuration Management
-
-### `mimi config init`
-
-Create a default config at `~/.config/mimi/config.toml`.
-
-### `mimi config validate`
-
-Parse and validate the config file.
-
-### `mimi config dump`
-
-Print the resolved config as JSON.
-
-### `mimi config reload`
-
-Send SIGHUP to a running daemon to reload config without restart.
+- **Minimized-window detection is best-effort**: a minimized window on the Space currently displayed on its screen is correctly excluded, but a minimized window on a Space that isn't currently displayed on any screen may still be captured and restored as if it weren't minimized — there's no reliable per-window signal for that case.
+- **Manual only**: save/restore only happens when you run these commands directly. It's never triggered automatically on a schedule, at login, or in response to any system event.
+- **Requires both Accessibility and Screen Recording permissions** — Screen Recording is needed to read window titles reliably for restore matching; see [`mumu status`](#mumu-status).

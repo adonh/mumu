@@ -7,22 +7,22 @@
 	<string>en</string>
 
 	<key>CFBundleDisplayName</key>
-	<string>Mimi</string>
+	<string>Mumu</string>
 
 	<key>CFBundleIconFile</key>
 	<string>icon</string>
 
 	<key>CFBundleExecutable</key>
-	<string>mimi</string>
+	<string>mumu</string>
 
 	<key>CFBundleIdentifier</key>
-	<string>com.y3owk1n.mimi</string>
+	<string>com.adonh.mumu</string>
 
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 
 	<key>CFBundleName</key>
-	<string>Mimi</string>
+	<string>Mumu</string>
 
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -33,7 +33,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>SHORT_VERSION</string>
 
-	<key>MimiBuildID</key>
+	<key>MumuBuildID</key>
 	<string>BUILD_ID</string>
 
 	<key>NSHighResolutionCapable</key>
@@ -43,9 +43,9 @@
 	<true/>
 
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Mimi needs Accessibility access to inspect and interact with user interface elements for keyboard-driven navigation.</string>
+	<string>Mumu needs Accessibility access to control windows and Spaces for layout save/restore.</string>
 
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Mimi may capture screen content for vision-based element detection to enhance navigation accuracy.</string>
+	<string>Mumu needs Screen Recording access to read window titles, used to match windows when restoring a saved layout.</string>
 </dict>
 </plist>

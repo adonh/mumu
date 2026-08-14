@@ -1,12 +1,12 @@
 name: Feature Request
-description: Suggest a new feature or enhancement for Mimi
+description: Suggest a new feature or enhancement for mumu
 labels: ["enhancement"]
 body:
     - type: markdown
       attributes:
           value: |
               Thanks for suggesting an improvement!
-              Please check [existing issues](https://github.com/y3owk1n/mimi/issues?q=is%3Aissue+label%3Aenhancement) and [discussions](https://github.com/y3owk1n/mimi/discussions) first to avoid duplicates.
+              Please check [existing issues](https://github.com/adonh/mumu/issues?q=is%3Aissue+label%3Aenhancement) and [discussions](https://github.com/adonh/mumu/discussions) first to avoid duplicates.
 
     - type: checkboxes
       attributes:
@@ -26,12 +26,11 @@ body:
     - type: textarea
       attributes:
           label: Proposed solution
-          description: How do you envision this working? Include config examples or behavior descriptions.
+          description: How do you envision this working? Include example commands or output.
           placeholder: |
-              A new config option like:
+              A new flag/command like:
 
-              [new_config]
-              example_option = true
+              mumu <command> --new-flag
 
               This would allow...
       validations:

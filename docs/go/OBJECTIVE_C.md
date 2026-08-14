@@ -6,9 +6,8 @@
 
 Native implementations belong in `.m` / `.h` files:
 
-- `internal/native/` — window/space action APIs and hook daemon observers (SkyLight, Accessibility, workspace, AX)
-- `internal/systray/` — menu bar UI
-- `internal/permissions/` — accessibility permission prompts
+- `internal/native/` — window/space enumeration and move APIs for layout save/restore (SkyLight, Accessibility, CGWindowList)
+- `internal/permissions/` — Accessibility and Screen Recording permission checks
 
 Go files use a minimal CGO preamble (`#include` headers, `#cgo` flags, and `extern` declarations for `//export` callbacks only).
 
@@ -23,9 +22,8 @@ Bridge `.m` files must `#include` their matching header and must **not** re-decl
 ```objc
 #import <Foundation/Foundation.h>
 
-void InitCocoaApp(void);
-void WorkspaceObserverStart(void);
-void WorkspaceObserverStop(void);
+bool MumuCheckAccessibilityPermissions(void);
+bool MumuCheckScreenRecordingPermissions(void);
 ```
 
 ### Implementation Files (.m)
@@ -39,21 +37,12 @@ Standard structure:
 5. C interface functions
 
 ```objc
-#import "workspace.h"
+#import "mumu.h"
 #import <Cocoa/Cocoa.h>
-
-#pragma mark - Workspace Observer
-
-static id s_workspaceObserver = nil;
 
 #pragma mark - C Interface
 
-void InitCocoaApp(void) {
-    [NSApplication sharedApplication];
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-}
-
-void WorkspaceObserverStart(void) {
+uint64_t MumuActiveSpaceID(void) {
     // Implementation
 }
 ```
@@ -62,15 +51,12 @@ void WorkspaceObserverStart(void) {
 
 ### C Bridge Exports
 
-Functions declared in `.h` files and called from Go via CGO use a descriptive prefix related to their observer (e.g., `Workspace`, `AX`, `Power`):
+Functions declared in `.h` files and called from Go via CGO use the `Mumu` prefix:
 
 ```objc
-void InitCocoaApp(void);
-void WorkspaceObserverStart(void);
-void WorkspaceObserverStop(void);
-CFRunLoopRef GetRunLoop(void);
-bool AXInstallObserver(int pid);
-void AXRemoveObserver(int pid);
+uint64_t MumuActiveSpaceID(void);
+int MumuMissionControlIndexForSpace(uint64_t sid);
+bool MumuMoveWindowToSpace(uint32_t windowID, uint64_t spaceID);
 ```
 
 ### Objective-C Methods
@@ -101,15 +87,15 @@ void AXRemoveObserver(int pid);
 
 ### ARC
 
-mimi uses Automatic Reference Counting (ARC) for Objective-C code. The compiler handles `retain`/`release` automatically.
+mumu uses Automatic Reference Counting (ARC) for Objective-C code. The compiler handles `retain`/`release` automatically.
 
 ### C Interface Objects
 
 For objects passed across the C/Go boundary, use toll-free bridging or `__bridge` casts:
 
 ```objc
-CFRunLoopRef GetRunLoop(void) {
-    return (__bridge CFRunLoopRef)[NSRunLoop mainRunLoop];
+CFArrayRef MumuCopySpaceIDs(void) {
+    return (__bridge CFArrayRef)someNSArray;
 }
 ```
 
@@ -118,18 +104,16 @@ CFRunLoopRef GetRunLoop(void) {
 Use HeaderDoc-style comments for public API:
 
 ```objc
-/// Initialise the Cocoa application with background-only activation policy.
-void InitCocoaApp(void);
-
-/// Start observing NSWorkspace notifications.
-void WorkspaceObserverStart(void);
+/// Returns the Mission Control ordinal (1-based) for the given space ID,
+/// matching macOS's own "Switch to Desktop <n>" keyboard shortcut.
+int MumuMissionControlIndexForSpace(uint64_t sid);
 ```
 
 Inline comments for non-obvious logic:
 
 ```objc
-// Polling is used because NSWorkspaceActiveSpaceDidChangeNotification
-// is not delivered to NSApplicationActivationPolicyAccessory processes.
+// CGWindowList sees windows on every Space; AX only sees the currently
+// displayed Space on each screen, so layout capture must use CGWindowList.
 ```
 
 ## Code Organization
@@ -137,11 +121,9 @@ Inline comments for non-obvious logic:
 Use `#pragma mark` to organize code:
 
 ```objc
-#pragma mark - Workspace Observer
+#pragma mark - Space Lookup
 
 #pragma mark - C Interface
-
-#pragma mark - Power Observer
 ```
 
 ## Threading
@@ -150,10 +132,10 @@ All Cocoa/UI code must run on the main thread:
 
 ```objc
 if ([NSThread isMainThread]) {
-    [self startObserving];
+    [self doWork];
 } else {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self startObserving];
+        [self doWork];
     });
 }
 ```

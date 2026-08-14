@@ -2,10 +2,11 @@ package layout
 
 import (
 	"fmt"
+	"sort"
 
-	derrors "github.com/y3owk1n/mimi/internal/errors"
-	"github.com/y3owk1n/mimi/internal/space"
-	"github.com/y3owk1n/mimi/internal/window"
+	derrors "github.com/adonh/mumu/internal/errors"
+	"github.com/adonh/mumu/internal/space"
+	"github.com/adonh/mumu/internal/window"
 )
 
 // SkipReason describes why a saved window entry could not be restored.
@@ -71,13 +72,17 @@ type moveTarget struct {
 // creates or removes spaces; entries whose target space no longer exists
 // are skipped and reported.
 //
+// sortKey determines both the order windows are moved in and the order
+// their per-window progress lines print in (see SortKey); it has no
+// effect on which windows are matched, moved, or skipped.
+//
 // progress, if non-nil, receives status updates while windows are scanned
 // and moved — the latter can take a while since each move is paced to let
 // WindowServer catch up; pass nil to discard them.
 //
 // Callers are responsible for any arrangement-drift confirmation prompt
 // (see DetectDrift) before calling Restore.
-func Restore(saved *Layout, progress ProgressFunc) (RestoreSummary, error) {
+func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSummary, error) {
 	summary := RestoreSummary{}
 
 	err := ensureLayoutPermissions()
@@ -156,18 +161,22 @@ func Restore(saved *Layout, progress ProgressFunc) (RestoreSummary, error) {
 		)
 	}
 
+	mcOrdinal := newMissionControlOrdinalLookup()
+	sort.SliceStable(toMove, func(i, j int) bool {
+		return entryLess(toMove[i].entry, toMove[j].entry, sortKey, mcOrdinal)
+	})
+
 	if len(toMove) > 0 {
 		progress.emit(fmt.Sprintf("Moving %d window(s)...", len(toMove)))
 	}
 
 	for moveIdx, target := range toMove {
 		progress.emit(fmt.Sprintf(
-			"  [%d/%d] %s — %q → space %d",
-			moveIdx+1,
-			len(toMove),
+			"  %s %s — %s — %q",
+			FormatIndex(moveIdx+1, len(toMove)),
+			space.DualLabel(target.entry.Ordinal),
 			target.entry.BundleID,
 			displayTitle(target.entry.Title),
-			target.entry.Ordinal,
 		))
 
 		err := window.MoveWindowIDToSpace(target.windowID, target.sid)

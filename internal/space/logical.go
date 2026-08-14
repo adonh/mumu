@@ -2,7 +2,7 @@ package space
 
 /*
 #cgo CFLAGS: -x objective-c
-#include "../native/mimi.h"
+#include "../native/mumu.h"
 #include <stdlib.h>
 */
 import "C"
@@ -13,21 +13,21 @@ import "unsafe"
 // in logical left-to-right order. Numerically identical to Count(); only the
 // ordering used to reach that total differs. This numbering is scoped to the
 // layout save/restore capability and is independent of which display is
-// primary — see internal/native/mimi.h for details.
+// primary — see internal/native/mumu.h for details.
 func LogicalCount() int {
-	return int(C.MimiLogicalSpaceCount())
+	return int(C.MumuLogicalSpaceCount())
 }
 
 // LogicalSpaceID returns the macOS space ID at the given 1-based logical
 // left-to-right index, or 0 if the index is out of range.
 func LogicalSpaceID(logicalIndex int) uint64 {
-	return uint64(C.MimiLogicalSpaceID(C.int(logicalIndex)))
+	return uint64(C.MumuLogicalSpaceID(C.int(logicalIndex)))
 }
 
 // LogicalIndexForSpace returns the 1-based logical left-to-right index for a
 // given macOS space ID, or 0 if the space ID is not currently known.
 func LogicalIndexForSpace(sid uint64) int {
-	return int(C.MimiLogicalIndexForSpace(C.uint64_t(sid)))
+	return int(C.MumuLogicalIndexForSpace(C.uint64_t(sid)))
 }
 
 // LeftToRightSpaceCounts returns the per-display space-count sequence in
@@ -37,7 +37,7 @@ func LogicalIndexForSpace(sid uint64) int {
 func LeftToRightSpaceCounts() []int {
 	var cCount C.int
 
-	ptr := C.MimiLeftToRightSpaceCounts(&cCount)
+	ptr := C.MumuLeftToRightSpaceCounts(&cCount)
 	if ptr == nil || cCount == 0 {
 		return []int{}
 	}

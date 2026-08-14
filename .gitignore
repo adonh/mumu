@@ -3,7 +3,7 @@ bin/
 build/
 *.app
 *.dmg
-/mimi
+/mumu
 
 # Generated man pages
 /man/
@@ -34,9 +34,4 @@ go.work
 
 # Logs
 *.log
-
-# Config (keep default)
-config.toml
-!configs/default-config.toml
-
 .direnv/

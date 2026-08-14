@@ -15,7 +15,7 @@ Only the **latest release** receives security fixes.
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report privately via [GitHub Security Advisories](https://github.com/y3owk1n/mimi/security/advisories/new) or contact [@y3owk1n](https://github.com/y3owk1n).
+Report privately via [GitHub Security Advisories](https://github.com/adonh/mumu/security/advisories/new) or contact [@adonh](https://github.com/adonh).
 
 ---
 
@@ -23,27 +23,20 @@ Report privately via [GitHub Security Advisories](https://github.com/y3owk1n/mim
 
 ### Permissions
 
-mimi requires **macOS Accessibility permission** for:
-
-- `mimi action` commands (window focus, space switching, move window)
-- Window hooks (`on_window_*`)
-
-With Accessibility granted, mimi can read window metadata and synthesize input events for space switching. It does not record, transmit, or log UI content beyond what hooks need.
-
-Workspace hooks (`on_workspace_changed`) do not require Accessibility.
+mumu requires **macOS Accessibility** and **Screen Recording** permission to save and restore window-to-Space layouts (`mumu save`, `mumu restore`). With these granted, mumu can enumerate windows, read their titles, and move them between Spaces. It does not record, transmit, or log window content — window titles are only used in-memory for restore matching and are written to the local layout JSON file.
 
 ### No Network Access
 
-mimi makes no outbound network connections, sends no telemetry, and does not phone home.
+mumu makes no outbound network connections, sends no telemetry, and does not phone home.
+
+### No Background Process
+
+mumu is a plain, one-shot CLI. It runs only when a command is invoked and exits when the command finishes — there is no daemon, background process, or auto-start mechanism.
 
 ### CGo / Objective-C
 
-Native code lives in `internal/native/`. Space and window-to-space features use undocumented SkyLight private APIs. Report memory-safety issues in this layer promptly.
-
-### Hook Execution
-
-Hooks run shell commands with the daemon's user privileges. Do not put untrusted content into hook commands or config files.
+Native code lives in `internal/native/`. Window enumeration and window-to-Space moves use undocumented SkyLight and CGWindowList private APIs. Report memory-safety issues in this layer promptly.
 
 ### Private APIs
 
-`mimi action space` and `mimi action move_window_to_space` use reverse-engineered private macOS APIs. They may break on OS updates and are not security-reviewed by Apple.
+Space-related native calls use reverse-engineered private macOS APIs. They may break on OS updates and are not security-reviewed by Apple.

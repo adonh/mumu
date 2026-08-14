@@ -17,18 +17,15 @@ just build
 ## Project Layout
 
 ```
-cmd/mimi/              CLI binary
+cmd/mumu/              CLI binary
 internal/
-  action/              mimi action dispatch
-  window/              AX window wrappers
-  space/               Mission Control operations
-  native/              All Obj-C + CGO (actions and observers)
-  observe/             Hook daemon event routing
-  hooks/               Hook registry and executor
-  config/              TOML config
-  daemon/              Daemon lifecycle
-  permissions/         Accessibility checks
-  systray/             Menu bar UI
+  layout/              Layout save/restore: capture, JSON persistence, restore matching
+  window/              AX window wrappers and CGWindowList-based window moves
+  space/               Mission Control operations, logical left-to-right numbering
+  native/              Obj-C + CGO bridge (window/space APIs, layout enumeration)
+  permissions/         Accessibility and Screen Recording checks
+  errors/              Structured error types
+  paths/               Home-directory path expansion
 ```
 
 ---
@@ -36,12 +33,12 @@ internal/
 ## Build Commands
 
 ```bash
-just build          # build bin/mimi
+just build          # build bin/mumu
 just test           # run all tests
 just test-unit      # unit tests only
 just lint           # golangci-lint
 just fmt            # format Go + Objective-C
-just bundle         # build Mimi.app
+just bundle         # build Mumu.app
 just genman         # generate man pages
 ```
 
@@ -49,10 +46,9 @@ just genman         # generate man pages
 
 ## Adding a CLI Command
 
-1. Create `cmd/mimi/cmd/<name>.go` with a Cobra command using `RunE`
-2. Register in `root.go` `init()`
-3. Put business logic in `internal/`
-4. Document in `docs/CLI.md`
+1. Create `cmd/mumu/cmd/<name>.go` with a Cobra command using `RunE`, registered directly on `RootCmd` (there is no subcommand grouping)
+2. Put business logic in `internal/`
+3. Document in `docs/CLI.md`
 
 ---
 
@@ -60,9 +56,8 @@ just genman         # generate man pages
 
 Objective-C lives in:
 
-- `internal/native/` — window/space actions and hook daemon observers
-- `internal/systray/` — menu bar UI
-- `internal/permissions/` — accessibility permission prompts
+- `internal/native/` — window/space enumeration and moves for layout save/restore
+- `internal/permissions/` — accessibility and screen recording permission checks
 
 Format with `just fmt`. See [OBJECTIVE_C.md](go/OBJECTIVE_C.md).
 

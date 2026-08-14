@@ -15,7 +15,7 @@ formatters:
             sections:
                 - standard
                 - default
-                - prefix(github.com/y3owk1n/mimi)
+                - prefix(github.com/adonh/mumu)
 linters:
     default: all
     disable:

@@ -16,28 +16,27 @@ func TestService_Method_EdgeCase(t *testing.T)
 
 | Type        | Command                 | Purpose                                                                        |
 | ----------- | ----------------------- | ------------------------------------------------------------------------------ |
-| Unit        | `just test-unit`        | Business logic, algorithms, config validation with mocks                        |
+| Unit        | `just test-unit`        | Business logic, algorithms, pure functions with mocks                        |
 | Integration | `just test-integration` | Real macOS APIs, file system (tagged `//go:build integration`)                   |
 
 ## When to Use Each Type
 
 | Scenario           | Test Type   | Example                            |
 | ------------------ | ----------- | ---------------------------------- |
-| Business logic     | Unit        | Event kind matching, hook filtering |
-| Config validation  | Unit        | TOML parsing, field validation     |
-| Platform API calls | Integration | Observer lifecycle, CGO bridge     |
-| File operations    | Integration | Config loading, log writing        |
+| Business logic     | Unit        | Restore matching, sort ordering    |
+| Serialization       | Unit        | Layout JSON encode/decode round-trip |
+| Platform API calls | Integration | Window/space enumeration, CGO bridge |
+| File operations    | Integration | Layout file persistence            |
 
 ## Test Structure
 
 ### Arrange-Act-Assert
 
 ```go
-func TestHookFilter(t *testing.T) {
-  registry := NewRegistry()
-  hooks := registry.HooksFor(evt)
-  if len(hooks) != 1 {
-    t.Fatalf("expected 1 hook, got %d", len(hooks))
+func TestSortEntries(t *testing.T) {
+  entries := sortEntries(input, SortDisplay)
+  if len(entries) != len(input) {
+    t.Fatalf("expected %d entries, got %d", len(input), len(entries))
   }
 }
 ```
@@ -73,11 +72,11 @@ Integration tests that depend on native macOS APIs must use build tags:
 ```go
 //go:build integration
 
-package observe_test
+package space_test
 
 import "testing"
 
-func TestWorkspaceObserver(t *testing.T) {
+func TestActiveIndex(t *testing.T) {
   // ...
 }
 ```

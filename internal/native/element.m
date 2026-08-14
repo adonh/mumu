@@ -1,13 +1,13 @@
 //
 //  element.m
-//  mimi
+//  mumu
 //
 
-#import "mimi.h"
+#import "mumu.h"
 
 #import <Cocoa/Cocoa.h>
 
-void *MimiGetFocusedApplication(void) {
+void *MumuGetFocusedApplication(void) {
 	@autoreleasepool {
 		AXUIElementRef systemWide = AXUIElementCreateSystemWide();
 		if (systemWide) {
@@ -32,19 +32,13 @@ void *MimiGetFocusedApplication(void) {
 	}
 }
 
-void MimiReleaseElement(void *element) {
+void MumuReleaseElement(void *element) {
 	if (element) {
 		CFRelease((AXUIElementRef)element);
 	}
 }
 
-void MimiRetainElement(void *element) {
-	if (element) {
-		CFRetain((AXUIElementRef)element);
-	}
-}
-
-int MimiAreElementsEqual(void *element1, void *element2) {
+int MumuAreElementsEqual(void *element1, void *element2) {
 	if (!element1 || !element2)
 		return element1 == element2;
 
