@@ -1,194 +1,208 @@
-on:
-    workflow_call:
-        inputs:
-            release_tag:
-                required: true
-                type: string
-            version_override:
-                required: true
-                type: string
-            macos_bundle_version:
-                required: true
-                type: string
-            macos_short_version:
-                required: true
-                type: string
-        secrets:
-            upload_token:
-                required: false
-            # TODO: Add these once Developer ID signing is set up
-            # mac_developer_id_cert:
-            #     required: false
-            # mac_developer_id_key:
-            #     required: false
-            # mac_dev_id_keychain_pwd:
-            #     required: false
-            # apple_notary_api_issuer:
-            #     required: false
-            # apple_notary_api_key_id:
-            #     required: false
-            # apple_notary_api_key:
-            #     required: false
-            # apple_team_id:
-            #     required: false
-
 name: publish-artifacts
 
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      version_override:
+        required: true
+        type: string
+      macos_bundle_version:
+        required: true
+        type: string
+      macos_short_version:
+        required: true
+        type: string
+    secrets:
+      upload_token:
+        required: false
+      # TODO: Add these once Developer ID signing is set up
+      # mac_developer_id_cert:
+      #   required: false
+      # mac_developer_id_key:
+      #   required: false
+      # mac_dev_id_keychain_pwd:
+      #   required: false
+      # apple_notary_api_issuer:
+      #   required: false
+      # apple_notary_api_key_id:
+      #   required: false
+      # apple_notary_api_key:
+      #   required: false
+      # apple_team_id:
+      #   required: false
+
 jobs:
-    build-darwin-arm64-artifacts:
-        runs-on: macos-latest
-        permissions:
-            contents: write
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+  build-darwin-arm64-artifacts:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-            - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
-              with:
-                  go-version: 1.26.4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: 1.26.4
 
-            - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4.0.0
-              with:
-                  just-version: 1.54.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4.0.0
+        with:
+          just-version: 1.54.0
 
-            - name: Build mumu darwin arm64 artifact
-              run: just release-ci-darwin arm64 ${{ inputs.version_override }}
+      - name: Build mumu darwin arm64 artifact
+        env:
+          INPUTS_VERSION_OVERRIDE: ${{ inputs.version_override }}
+        run: just release-ci-darwin arm64 "$INPUTS_VERSION_OVERRIDE"
 
-            - name: Generate man pages
-              run: go run ./cmd/genman build/man
+      - name: Generate man pages
+        run: go run ./cmd/genman build/man
 
-            - name: Bundle mumu-darwin-arm64
-              run: |
-                  mkdir -p build/arm64/Mumu.app/Contents/{MacOS,Resources}
-                  cp bin/mumu-darwin-arm64 build/arm64/Mumu.app/Contents/MacOS/mumu
-                  chmod +x build/arm64/Mumu.app/Contents/MacOS/mumu
-                  # cp resources/icon.icns build/arm64/Mumu.app/Contents/Resources/icon.icns
-                  cp resources/Mumu.entitlements build/arm64/Mumu.app/Contents/Resources/Mumu.entitlements
-                  mkdir -p build/arm64/share/man/man1
-                  cp build/man/*.1 build/arm64/share/man/man1/
-                  sed \
-                    -e "s/BUNDLE_VERSION/${{ inputs.macos_bundle_version }}/g" \
-                    -e "s/SHORT_VERSION/${{ inputs.macos_short_version }}/g" \
-                    -e "s/BUILD_ID/${{ inputs.version_override }}/g" \
-                    resources/Info.plist.template > build/arm64/Mumu.app/Contents/Info.plist
-                  mkdir -p build/arm64/bin
-                  cp bin/mumu-darwin-arm64 build/arm64/bin/mumu
-                  chmod +x build/arm64/bin/mumu
+      - name: Bundle mumu-darwin-arm64
+        env:
+          INPUTS_MACOS_BUNDLE_VERSION: ${{ inputs.macos_bundle_version }}
+          INPUTS_MACOS_SHORT_VERSION: ${{ inputs.macos_short_version }}
+          INPUTS_VERSION_OVERRIDE: ${{ inputs.version_override }}
+        run: |
+          mkdir -p build/arm64/Mumu.app/Contents/{MacOS,Resources}
+          cp bin/mumu-darwin-arm64 build/arm64/Mumu.app/Contents/MacOS/mumu
+          chmod +x build/arm64/Mumu.app/Contents/MacOS/mumu
+          # cp resources/icon.icns build/arm64/Mumu.app/Contents/Resources/icon.icns
+          cp resources/Mumu.entitlements build/arm64/Mumu.app/Contents/Resources/Mumu.entitlements
+          mkdir -p build/arm64/share/man/man1
+          cp build/man/*.1 build/arm64/share/man/man1/
+          sed \
+            -e "s/BUNDLE_VERSION/${INPUTS_MACOS_BUNDLE_VERSION}/g" \
+            -e "s/SHORT_VERSION/${INPUTS_MACOS_SHORT_VERSION}/g" \
+            -e "s/BUILD_ID/${INPUTS_VERSION_OVERRIDE}/g" \
+            resources/Info.plist.template > build/arm64/Mumu.app/Contents/Info.plist
+          mkdir -p build/arm64/bin
+          cp bin/mumu-darwin-arm64 build/arm64/bin/mumu
+          chmod +x build/arm64/bin/mumu
 
-            - name: Codesign mumu-darwin-arm64 (ad-hoc)
-              run: |
-                  # TODO: Replace ad-hoc with Developer ID + notarization when cert is set up
-                  #       Remove this step and uncomment the "Developer ID sign & notarize" step below.
-                  codesign --force --deep --sign - \
-                    --entitlements resources/Mumu.entitlements \
-                    --options runtime \
-                    build/arm64/Mumu.app
+      - name: Codesign mumu-darwin-arm64 (ad-hoc)
+        run: |
+          # TODO: Replace ad-hoc with Developer ID + notarization when cert is set up
+          #       Remove this step and uncomment the "Developer ID sign & notarize" step below.
+          codesign --force --deep --sign - \
+            --entitlements resources/Mumu.entitlements \
+            --options runtime \
+            build/arm64/Mumu.app
 
-            # # TODO: Enable when Developer ID cert is set up (and disable the ad-hoc step above)
-            # - name: Developer ID sign & notarize
-            #   uses: ./.github/actions/developer-id-notarize
-            #   with:
-            #     app-path: build/arm64/Mumu.app
-            #     developer-id-identity: 'Developer ID Application: Your Name (TEAM_ID)'
-            #     mac-developer-id-cert: ${{ secrets.mac_developer_id_cert }}
-            #     mac-developer-id-key: ${{ secrets.mac_developer_id_key }}
-            #     mac-dev-id-keychain-pwd: ${{ secrets.mac_dev_id_keychain_pwd }}
-            #     apple-notary-api-issuer: ${{ secrets.apple_notary_api_issuer }}
-            #     apple-notary-api-key-id: ${{ secrets.apple_notary_api_key_id }}
-            #     apple-notary-api-key: ${{ secrets.apple_notary_api_key }}
-            #     apple-team-id: ${{ secrets.apple_team_id }}
+      # # TODO: Enable when Developer ID cert is set up (and disable the ad-hoc step above)
+      # - name: Developer ID sign & notarize
+      #   uses: ./.github/actions/developer-id-notarize
+      #   with:
+      #     app-path: build/arm64/Mumu.app
+      #     developer-id-identity: 'Developer ID Application: Your Name (TEAM_ID)'
+      #     mac-developer-id-cert: ${{ secrets.mac_developer_id_cert }}
+      #     mac-developer-id-key: ${{ secrets.mac_developer_id_key }}
+      #     mac-dev-id-keychain-pwd: ${{ secrets.mac_dev_id_keychain_pwd }}
+      #     apple-notary-api-issuer: ${{ secrets.apple_notary_api_issuer }}
+      #     apple-notary-api-key-id: ${{ secrets.apple_notary_api_key_id }}
+      #     apple-notary-api-key: ${{ secrets.apple_notary_api_key }}
+      #     apple-team-id: ${{ secrets.apple_team_id }}
 
-            - name: Package mumu-darwin-arm64
-              run: |
-                  cd build/arm64
-                  zip -r ../../mumu-darwin-arm64.zip bin Mumu.app share
-                  cd ../..
+      - name: Package mumu-darwin-arm64
+        run: |
+          cd build/arm64
+          zip -r ../../mumu-darwin-arm64.zip bin Mumu.app share
+          cd ../..
 
-            - name: Generate darwin arm64 checksum
-              run: |
-                  shasum -a 256 mumu-darwin-arm64.zip | awk '{print $1}' > mumu-darwin-arm64.zip.sha256
-                  ls -l mumu-darwin-arm64.zip mumu-darwin-arm64.zip.sha256
+      - name: Generate darwin arm64 checksum
+        run: |
+          shasum -a 256 mumu-darwin-arm64.zip | awk '{print $1}' > mumu-darwin-arm64.zip.sha256
+          ls -l mumu-darwin-arm64.zip mumu-darwin-arm64.zip.sha256
 
-            - name: Upload darwin arm64 release artifacts
-              env:
-                  GH_TOKEN: ${{ secrets.upload_token || github.token }}
-              run: |
-                  gh release upload "${{ inputs.release_tag }}" mumu-darwin-arm64.zip mumu-darwin-arm64.zip.sha256 --clobber
+      - name: Upload darwin arm64 release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.upload_token || github.token }}
+          INPUTS_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release upload "$INPUTS_RELEASE_TAG" mumu-darwin-arm64.zip mumu-darwin-arm64.zip.sha256 --clobber
 
-    build-darwin-amd64-artifacts:
-        runs-on: macos-15-intel
-        permissions:
-            contents: write
-        steps:
-            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+  build-darwin-amd64-artifacts:
+    runs-on: macos-15-intel
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-            - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
-              with:
-                  go-version: 1.26.4
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version: 1.26.4
 
-            - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4.0.0
-              with:
-                  just-version: 1.54.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4.0.0
+        with:
+          just-version: 1.54.0
 
-            - name: Build mumu darwin amd64 artifact
-              run: just release-ci-darwin amd64 ${{ inputs.version_override }}
+      - name: Build mumu darwin amd64 artifact
+        env:
+          INPUTS_VERSION_OVERRIDE: ${{ inputs.version_override }}
+        run: just release-ci-darwin amd64 "$INPUTS_VERSION_OVERRIDE"
 
-            - name: Generate man pages
-              run: go run ./cmd/genman build/man
+      - name: Generate man pages
+        run: go run ./cmd/genman build/man
 
-            - name: Bundle mumu-darwin-amd64
-              run: |
-                  mkdir -p build/amd64/Mumu.app/Contents/{MacOS,Resources}
-                  cp bin/mumu-darwin-amd64 build/amd64/Mumu.app/Contents/MacOS/mumu
-                  chmod +x build/amd64/Mumu.app/Contents/MacOS/mumu
-                  # cp resources/icon.icns build/amd64/Mumu.app/Contents/Resources/icon.icns
-                  cp resources/Mumu.entitlements build/amd64/Mumu.app/Contents/Resources/Mumu.entitlements
-                  mkdir -p build/amd64/share/man/man1
-                  cp build/man/*.1 build/amd64/share/man/man1/
-                  sed \
-                    -e "s/BUNDLE_VERSION/${{ inputs.macos_bundle_version }}/g" \
-                    -e "s/SHORT_VERSION/${{ inputs.macos_short_version }}/g" \
-                    -e "s/BUILD_ID/${{ inputs.version_override }}/g" \
-                    resources/Info.plist.template > build/amd64/Mumu.app/Contents/Info.plist
-                  mkdir -p build/amd64/bin
-                  cp bin/mumu-darwin-amd64 build/amd64/bin/mumu
-                  chmod +x build/amd64/bin/mumu
+      - name: Bundle mumu-darwin-amd64
+        env:
+          INPUTS_MACOS_BUNDLE_VERSION: ${{ inputs.macos_bundle_version }}
+          INPUTS_MACOS_SHORT_VERSION: ${{ inputs.macos_short_version }}
+          INPUTS_VERSION_OVERRIDE: ${{ inputs.version_override }}
+        run: |
+          mkdir -p build/amd64/Mumu.app/Contents/{MacOS,Resources}
+          cp bin/mumu-darwin-amd64 build/amd64/Mumu.app/Contents/MacOS/mumu
+          chmod +x build/amd64/Mumu.app/Contents/MacOS/mumu
+          # cp resources/icon.icns build/amd64/Mumu.app/Contents/Resources/icon.icns
+          cp resources/Mumu.entitlements build/amd64/Mumu.app/Contents/Resources/Mumu.entitlements
+          mkdir -p build/amd64/share/man/man1
+          cp build/man/*.1 build/amd64/share/man/man1/
+          sed \
+            -e "s/BUNDLE_VERSION/${INPUTS_MACOS_BUNDLE_VERSION}/g" \
+            -e "s/SHORT_VERSION/${INPUTS_MACOS_SHORT_VERSION}/g" \
+            -e "s/BUILD_ID/${INPUTS_VERSION_OVERRIDE}/g" \
+            resources/Info.plist.template > build/amd64/Mumu.app/Contents/Info.plist
+          mkdir -p build/amd64/bin
+          cp bin/mumu-darwin-amd64 build/amd64/bin/mumu
+          chmod +x build/amd64/bin/mumu
 
-            - name: Codesign mumu-darwin-amd64 (ad-hoc)
-              run: |
-                  # TODO: Replace ad-hoc with Developer ID + notarization when cert is set up
-                  #       Remove this step and uncomment the "Developer ID sign & notarize" step below.
-                  codesign --force --deep --sign - \
-                    --entitlements resources/Mumu.entitlements \
-                    --options runtime \
-                    build/amd64/Mumu.app
+      - name: Codesign mumu-darwin-amd64 (ad-hoc)
+        run: |
+          # TODO: Replace ad-hoc with Developer ID + notarization when cert is set up
+          #       Remove this step and uncomment the "Developer ID sign & notarize" step below.
+          codesign --force --deep --sign - \
+            --entitlements resources/Mumu.entitlements \
+            --options runtime \
+            build/amd64/Mumu.app
 
-            # # TODO: Enable when Developer ID cert is set up (and disable the ad-hoc step above)
-            # - name: Developer ID sign & notarize
-            #   uses: ./.github/actions/developer-id-notarize
-            #   with:
-            #     app-path: build/amd64/Mumu.app
-            #     developer-id-identity: 'Developer ID Application: Your Name (TEAM_ID)'
-            #     mac-developer-id-cert: ${{ secrets.mac_developer_id_cert }}
-            #     mac-developer-id-key: ${{ secrets.mac_developer_id_key }}
-            #     mac-dev-id-keychain-pwd: ${{ secrets.mac_dev_id_keychain_pwd }}
-            #     apple-notary-api-issuer: ${{ secrets.apple_notary_api_issuer }}
-            #     apple-notary-api-key-id: ${{ secrets.apple_notary_api_key_id }}
-            #     apple-notary-api-key: ${{ secrets.apple_notary_api_key }}
-            #     apple-team-id: ${{ secrets.apple_team_id }}
+      # # TODO: Enable when Developer ID cert is set up (and disable the ad-hoc step above)
+      # - name: Developer ID sign & notarize
+      #   uses: ./.github/actions/developer-id-notarize
+      #   with:
+      #     app-path: build/amd64/Mumu.app
+      #     developer-id-identity: 'Developer ID Application: Your Name (TEAM_ID)'
+      #     mac-developer-id-cert: ${{ secrets.mac_developer_id_cert }}
+      #     mac-developer-id-key: ${{ secrets.mac_developer_id_key }}
+      #     mac-dev-id-keychain-pwd: ${{ secrets.mac_dev_id_keychain_pwd }}
+      #     apple-notary-api-issuer: ${{ secrets.apple_notary_api_issuer }}
+      #     apple-notary-api-key-id: ${{ secrets.apple_notary_api_key_id }}
+      #     apple-notary-api-key: ${{ secrets.apple_notary_api_key }}
+      #     apple-team-id: ${{ secrets.apple_team_id }}
 
-            - name: Package mumu-darwin-amd64
-              run: |
-                  cd build/amd64
-                  zip -r ../../mumu-darwin-amd64.zip bin Mumu.app share
-                  cd ../..
+      - name: Package mumu-darwin-amd64
+        run: |
+          cd build/amd64
+          zip -r ../../mumu-darwin-amd64.zip bin Mumu.app share
+          cd ../..
 
-            - name: Generate darwin amd64 checksum
-              run: |
-                  shasum -a 256 mumu-darwin-amd64.zip | awk '{print $1}' > mumu-darwin-amd64.zip.sha256
-                  ls -l mumu-darwin-amd64.zip mumu-darwin-amd64.zip.sha256
+      - name: Generate darwin amd64 checksum
+        run: |
+          shasum -a 256 mumu-darwin-amd64.zip | awk '{print $1}' > mumu-darwin-amd64.zip.sha256
+          ls -l mumu-darwin-amd64.zip mumu-darwin-amd64.zip.sha256
 
-            - name: Upload darwin amd64 release artifacts
-              env:
-                  GH_TOKEN: ${{ secrets.upload_token || github.token }}
-              run: |
-                  gh release upload "${{ inputs.release_tag }}" mumu-darwin-amd64.zip mumu-darwin-amd64.zip.sha256 --clobber
+      - name: Upload darwin amd64 release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.upload_token || github.token }}
+          INPUTS_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release upload "$INPUTS_RELEASE_TAG" mumu-darwin-amd64.zip mumu-darwin-amd64.zip.sha256 --clobber
