@@ -13,7 +13,7 @@
 - [`mumu restore`](#mumu-restore---yes---sort-displaymacosapp)
 - [`mumu list`](#mumu-list)
 - [`mumu show`](#mumu-show-display-count---sort-displaymacosapp)
-- [`mumu delete`](#mumu-delete-display-count)
+- [`mumu delete`](#mumu-delete-display-count---yes)
 - [`mumu status`](#mumu-status)
 - [Limitations](#limitations)
 
@@ -86,13 +86,14 @@ mumu show 2
 mumu show --sort app
 ```
 
-## `mumu delete [display-count]`
+## `mumu delete [display-count] [--yes]`
 
-Deletes the saved layout for the given display count (default: current display count).
+Deletes the saved layout for the given display count (default: current display count). You'll be prompted to confirm before it's deleted. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting). If no saved layout exists for the display count, the command reports that and exits without prompting.
 
 ```bash
 mumu delete
 mumu delete 2
+mumu delete --yes
 ```
 
 ## `mumu status`
