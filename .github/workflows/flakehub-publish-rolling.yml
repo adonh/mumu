@@ -1,22 +1,22 @@
-name: "Publish every Git push to main to FlakeHub"
+name: Publish every Git push to main to FlakeHub
 on:
     push:
         branches:
-            - "main"
+            - main
 jobs:
     flakehub-publish:
-        runs-on: "ubuntu-latest"
+        runs-on: ubuntu-latest
         permissions:
-            id-token: "write"
-            contents: "read"
+            id-token: write
+            contents: read
         steps:
-            - uses: "actions/checkout@v7"
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
               with:
                   persist-credentials: false
-            - uses: "DeterminateSystems/determinate-nix-action@v3"
-            - uses: "DeterminateSystems/flakehub-push@main"
+            - uses: DeterminateSystems/determinate-nix-action@61cbfe2efc2d4e7a8a6d56967c3c1058e846c858  # v3.21.9
+            - uses: DeterminateSystems/flakehub-push@71f57208810a5d299fc6545350981de98fdbc860  # v6
               with:
-                  name: "adonh/mumu"
+                  name: adonh/mumu
                   rolling: true
-                  visibility: "public"
+                  visibility: public
                   include-output-paths: true
