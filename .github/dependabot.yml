@@ -1,19 +1,41 @@
 version: 2
+
 updates:
-  # Enable Dependabot updates for Go
-  - package-ecosystem: "gomod"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main
     schedule:
-      interval: "weekly" # Check for updates weekly
+      interval: daily
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns:
+          - '*'
+          
+  - package-ecosystem: gomod
+    directory: /
+    target-branch: main
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns:
+          - '*'
 
-  # Enable Dependabot updates for GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: nix
+    directory: /
+    target-branch: main
     schedule:
-      interval: "weekly" # Check for updates weekly
-
-  # Enable Dependabot updates for Nix Flakes
-  - package-ecosystem: "nix"
-    directory: "/"
-    schedule:
-      interval: "weekly" # Check for updates weekly
+      interval: daily
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        patterns:
+          - '*'

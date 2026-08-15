@@ -1,69 +1,83 @@
-name: 'Developer ID Sign & Notarize'
-description: 'Sign a macOS .app bundle with Developer ID and submit for notarization'
+name: Developer ID Sign & Notarize
+description: Sign a macOS .app bundle with Developer ID and submit for notarization
 
 inputs:
   app-path:
-    description: 'Path to the .app bundle to sign'
+    description: Path to the .app bundle to sign
     required: true
   developer-id-identity:
-    description: 'codesign identity, e.g. "Developer ID Application: Your Name (TEAM1234567)"'
+    description: codesign identity, e.g. "Developer ID Application: Your Name (TEAM1234567)"
     required: true
   mac-developer-id-cert:
-    description: 'Base64-encoded Developer ID certificate (p12)'
+    description: Base64-encoded Developer ID certificate (p12)
     required: true
   mac-developer-id-key:
-    description: 'Password for the p12 certificate'
+    description: Password for the p12 certificate
     required: true
   mac-dev-id-keychain-pwd:
-    description: 'Password for the temporary build keychain'
+    description: Password for the temporary build keychain
     required: true
   apple-notary-api-issuer:
-    description: 'Apple notary API issuer ID'
+    description: Apple notary API issuer ID
     required: true
   apple-notary-api-key-id:
-    description: 'Apple notary API key ID'
+    description: Apple notary API key ID
     required: true
   apple-notary-api-key:
-    description: 'Apple notary API key (p8 file contents)'
+    description: Apple notary API key (p8 file contents)
     required: true
   apple-team-id:
-    description: 'Apple Developer Team ID'
+    description: Apple Developer Team ID
     required: true
 
 runs:
-  using: 'composite'
+  using: composite
   steps:
     - shell: bash
+      env:
+        INPUTS_MAC_DEVELOPER_ID_CERT: ${{ inputs.mac-developer-id-cert }}
+        INPUTS_MAC_DEV_ID_KEYCHAIN_PWD: ${{ inputs.mac-dev-id-keychain-pwd }}
       run: |
-        echo "${{ inputs.mac-developer-id-cert }}" | base64 --decode > /tmp/dev_id_cert.p12
-        security create-keychain -p "${{ inputs.mac-dev-id-keychain-pwd }}" build.keychain
+        echo "$INPUTS_MAC_DEVELOPER_ID_CERT" | base64 --decode > "$RUNNER_TEMP/dev_id_cert.p12"
+        security create-keychain -p "$INPUTS_MAC_DEV_ID_KEYCHAIN_PWD" build.keychain
         security default-keychain -s build.keychain
-        security unlock-keychain -p "${{ inputs.mac-dev-id-keychain-pwd }}" build.keychain
-        security import /tmp/dev_id_cert.p12 -k build.keychain \
-          -P "${{ inputs.mac-developer-id-key }}" -T /usr/bin/codesign
+        security unlock-keychain -p "$INPUTS_mac_dev_id_keychain_pwd" build.keychain
+        security import "$RUNNER_TEMP/dev_id_cert.p12" -k build.keychain \
+          -P "$INPUTS_MAC_DEVELOPER_ID_KEY" -T /usr/bin/codesign
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k \
-          "${{ inputs.mac-dev-id-keychain-pwd }}" build.keychain
-        rm /tmp/dev_id_cert.p12
+          "$INPUTS_MAC_DEV_ID_KEYCHAIN_PWD" build.keychain
+        rm "$RUNNER_TEMP/dev_id_cert.p12"
 
     - shell: bash
+      env:
+        INPUTS_APP_PATH: ${{ inputs.app-path }}
+        INPUTS_DEVELOPER_ID_IDENTITY: ${{ inputs.developer-id-identity }}
       run: |
-        codesign --force --deep --sign "${{ inputs.developer-id-identity }}" \
+        codesign --force --deep --sign "$INPUTS_DEVELOPER_ID_IDENTITY" \
           --entitlements resources/Mumu.entitlements \
           --options runtime \
-          "${{ inputs.app-path }}"
+          "$INPUTS_APP_PATH"
 
     - shell: bash
+      env:
+        INPUTS_APPLE_NOTARY_API_ISSUER: ${{ inputs.apple-notary-api-issuer }}
+        INPUTS_APPLE_NOTARY_API_KEY: ${{ inputs.apple-notary-api-key }}
+        INPUTS_APPLE_NOTARY_API_KEY_ID: ${{ inputs.apple-notary-api-key-id }}
+        INPUTS_APPLE_TEAM_ID: ${{ inputs.apple-team-id }}
+        INPUTS_APP_PATH: ${{ inputs.app-path }}
       run: |
-        echo "${{ inputs.apple-notary-api-key }}" > /tmp/notary_api_key.p8
-        zip_path="${{ inputs.app-path }}-notarize.zip"
-        ditto -c -k --sequesterRsrc --keepParent "${{ inputs.app-path }}" "$zip_path"
+        echo "$INPUTS_APPLE_NOTARY_API_KEY" > "$RUNNER_TEMP/notary_api_key.p8"
+        zip_path="$INPUTS_APP_PATH-notarize.zip"
+        ditto -c -k --sequesterRsrc --keepParent "$INPUTS_APP_PATH" "$zip_path"
         xcrun notarytool submit "$zip_path" \
-          --issuer "${{ inputs.apple-notary-api-issuer }}" \
-          --key-id "${{ inputs.apple-notary-api-key-id }}" \
-          --key /tmp/notary_api_key.p8 \
-          --team-id "${{ inputs.apple-team-id }}" \
+          --issuer "$INPUTS_APPLE_NOTARY_API_ISSUER" \
+          --key-id "$INPUTS_APPLE_NOTARY_API_KEY_ID" \
+          --key "$RUNNER_TEMP/notary_api_key.p8" \
+          --team-id "$INPUTS_APPLE_TEAM_ID" \
           --wait
-        rm "$zip_path" /tmp/notary_api_key.p8
+        rm "$zip_path" "$RUNNER_TEMP/notary_api_key.p8"
 
     - shell: bash
-      run: xcrun stapler staple "${{ inputs.app-path }}"
+      env:
+        INPUTS_APP_PATH: ${{ inputs.app-path }}
+      run: xcrun stapler staple "$INPUTS_APP_PATH"
