@@ -1,4 +1,4 @@
-package layout //nolint:testpackage // tests unexported matchWindowIndex / intSlicesEqual
+package layout //nolint:testpackage // tests unexported planDirectMoves / intSlicesEqual
 
 import (
 	"testing"
@@ -10,137 +10,243 @@ func liveEntry(title string) window.AcrossSpacesEntry {
 	return window.AcrossSpacesEntry{Title: title}
 }
 
-// noSuchTitle is a saved title used across tests to exercise the
-// no-title-match path without matching any live window.
-const noSuchTitle = "Missing"
-
-func TestMatchWindowIndex_ExactTitleMatch(t *testing.T) {
+func TestPlanDirectMoves_MatchesByTitleSimilarity(t *testing.T) {
 	t.Parallel()
 
-	live := []window.AcrossSpacesEntry{liveEntry("Alpha"), liveEntry("Beta"), liveEntry("Gamma")}
-	entry := Entry{Title: "Beta", Index: 0}
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: "Beta", Index: 0, Ordinal: 3},
+		},
+	}
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {liveEntry("Alpha"), liveEntry("Beta"), liveEntry("Gamma")},
+	}
 
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != 1 {
-		t.Fatalf("matchWindowIndex() = %d, want 1 (exact title match)", got)
+	toMove, skipped, validOrdinals := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		map[string]map[int]bool{},
+		10,
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
+
+	if len(skipped) != 0 {
+		t.Fatalf("skipped = %#v, want none", skipped)
+	}
+
+	if len(toMove) != 1 || toMove[0].windowID != liveByBundle[fallbackTestBundle][1].WindowID {
+		t.Fatalf("toMove = %#v, want the exact-title match (live[1])", toMove)
+	}
+
+	if toMove[0].fuzzy {
+		t.Fatal("exact title match marked fuzzy, want false")
+	}
+
+	if got := validOrdinals[fallbackTestBundle]; len(got) != 1 || got[0] != 3 {
+		t.Fatalf("validAssignmentOrdinals = %#v, want [3]", got)
 	}
 }
 
-func TestMatchWindowIndex_AmbiguousTitleFallsBackToIndex(t *testing.T) {
+func TestPlanDirectMoves_OneToOneWhenTwoEntriesPreferTheSameWindow(t *testing.T) {
 	t.Parallel()
 
-	live := []window.AcrossSpacesEntry{
-		liveEntry("Untitled"),
-		liveEntry("Untitled"),
-		liveEntry("Untitled"),
+	// live[0] ("a b c d") is the naive top pick for both entries; a
+	// sequential per-entry matcher processing entries in order would
+	// double-claim it for the first entry it reaches. The batch matcher
+	// must instead give it to whichever entry it's the best match for,
+	// and resolve the other to its own distinct, still-valid alternative
+	// (live[2]) rather than leaving it unmatched.
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: "a b c d", Index: 0, Ordinal: 1},
+			{BundleID: fallbackTestBundle, Title: "a b c d e", Index: 1, Ordinal: 2},
+		},
 	}
-	entry := Entry{Title: "Untitled", Index: 2}
-
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != 2 {
-		t.Fatalf("matchWindowIndex() = %d, want 2 (index fallback on ambiguous title)", got)
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {
+			fallbackLiveEntry(1, "a b c d"),
+			fallbackLiveEntry(2, "a b"),
+			fallbackLiveEntry(3, "c d e"),
+		},
 	}
-}
 
-func TestMatchWindowIndex_NoTitleMatchFallsBackToIndex(t *testing.T) {
-	t.Parallel()
+	toMove, skipped, _ := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		map[string]map[int]bool{},
+		10,
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
 
-	live := []window.AcrossSpacesEntry{liveEntry("One"), liveEntry("Two")}
-	entry := Entry{Title: noSuchTitle, Index: 1}
-
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != 1 {
-		t.Fatalf("matchWindowIndex() = %d, want 1 (index fallback, no title match)", got)
+	if len(skipped) != 0 {
+		t.Fatalf("skipped = %#v, want none", skipped)
 	}
-}
 
-func TestMatchWindowIndex_EmptyTitleUsesIndexDirectly(t *testing.T) {
-	t.Parallel()
-
-	live := []window.AcrossSpacesEntry{liveEntry("One"), liveEntry("")}
-	entry := Entry{Title: "", Index: 1}
-
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != 1 {
-		t.Fatalf("matchWindowIndex() = %d, want 1", got)
+	if len(toMove) != 2 {
+		t.Fatalf("toMove = %#v, want 2 moves", toMove)
 	}
-}
 
-func TestMatchWindowIndex_UsedWindowSkippedInTitleMatch(t *testing.T) {
-	t.Parallel()
+	claimed := map[uint32]bool{}
 
-	live := []window.AcrossSpacesEntry{liveEntry("Alpha"), liveEntry("Beta")}
-	entry := Entry{Title: "Alpha", Index: 1}
+	for _, target := range toMove {
+		if claimed[target.windowID] {
+			t.Fatalf("window %d claimed by more than one move: %#v", target.windowID, toMove)
+		}
 
-	// live[0] has the matching title but is already used, so title matching
-	// must skip it, leaving no unambiguous match; this falls back to the
-	// saved index (1), which is available.
-	got := matchWindowIndex(entry, live, map[int]bool{0: true})
-	if got != 1 {
-		t.Fatalf(
-			"matchWindowIndex() = %d, want 1 (fallback to index since the matching title is used)",
-			got,
-		)
+		claimed[target.windowID] = true
 	}
-}
 
-func TestMatchWindowIndex_NoCandidateReturnsNegativeOne(t *testing.T) {
-	t.Parallel()
+	byOrdinal := map[int]moveTarget{}
+	for _, target := range toMove {
+		byOrdinal[target.entry.Ordinal] = target
+	}
 
-	// Two unclaimed candidates, neither matching by title or index: genuine
-	// ambiguity, so no fallback tier should guess.
-	live := []window.AcrossSpacesEntry{liveEntry("One"), liveEntry("Two")}
-	entry := Entry{Title: noSuchTitle, Index: 5}
+	if got := byOrdinal[1]; got.windowID != 1 || got.fuzzy {
+		t.Fatalf("ordinal 1 target = %#v, want window 1, not fuzzy (exact match)", got)
+	}
 
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != -1 {
-		t.Fatalf("matchWindowIndex() = %d, want -1", got)
+	if got := byOrdinal[2]; got.windowID != 3 || !got.fuzzy {
+		t.Fatalf("ordinal 2 target = %#v, want window 3, fuzzy (approximate match)", got)
 	}
 }
 
-func TestMatchWindowIndex_SoleRemainingCandidateMatchesRegardlessOfTitleOrIndex(t *testing.T) {
+func TestPlanDirectMoves_UnmatchedWhenAppNotRunning(t *testing.T) {
 	t.Parallel()
 
-	// Only one window is currently open for this app; even though its
-	// title doesn't match (common for browsers, whose title reflects page
-	// content) and the saved index (5) is out of range — e.g. because
-	// several other windows from the same saved layout have since been
-	// closed — there's no real ambiguity about which window this is.
-	live := []window.AcrossSpacesEntry{liveEntry("Completely different title")}
-	entry := Entry{Title: "Old title", Index: 5}
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {{BundleID: fallbackTestBundle, Title: "Report", Ordinal: 1}},
+	}
 
-	got := matchWindowIndex(entry, live, map[int]bool{})
-	if got != 0 {
-		t.Fatalf("matchWindowIndex() = %d, want 0 (sole remaining candidate)", got)
+	toMove, skipped, validOrdinals := planDirectMoves(
+		entriesByBundle,
+		map[string][]window.AcrossSpacesEntry{},
+		map[string]map[int]bool{},
+		10,
+		func(int) uint64 { return 0 },
+	)
+
+	if len(toMove) != 0 {
+		t.Fatalf("toMove = %#v, want none", toMove)
+	}
+
+	if len(skipped) != 1 || skipped[0].Reason != SkipAppNotRunning {
+		t.Fatalf("skipped = %#v, want one SkipAppNotRunning", skipped)
+	}
+
+	if len(validOrdinals) != 0 {
+		t.Fatalf("validAssignmentOrdinals = %#v, want none", validOrdinals)
 	}
 }
 
-func TestMatchWindowIndex_SoleRemainingCandidateSkippedIfAlreadyUsed(t *testing.T) {
+func TestPlanDirectMoves_UnmatchedWhenMoreEntriesThanWindows(t *testing.T) {
 	t.Parallel()
 
-	live := []window.AcrossSpacesEntry{liveEntry("One")}
-	entry := Entry{Title: noSuchTitle, Index: 5}
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: "foo", Index: 0, Ordinal: 1},
+			{BundleID: fallbackTestBundle, Title: "bar", Index: 1, Ordinal: 2},
+		},
+	}
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {liveEntry("foo")},
+	}
 
-	// The only window is already claimed by another entry in this restore
-	// pass, so nothing remains for this one.
-	got := matchWindowIndex(entry, live, map[int]bool{0: true})
-	if got != -1 {
-		t.Fatalf("matchWindowIndex() = %d, want -1 (sole candidate already used)", got)
+	toMove, skipped, _ := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		map[string]map[int]bool{},
+		10,
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
+
+	if len(toMove) != 1 {
+		t.Fatalf("toMove = %#v, want 1 match", toMove)
+	}
+
+	if len(skipped) != 1 || skipped[0].Reason != SkipUnmatchedWindow {
+		t.Fatalf("skipped = %#v, want one SkipUnmatchedWindow", skipped)
 	}
 }
 
-func TestMatchWindowIndex_IndexAlreadyUsed(t *testing.T) {
+func TestPlanDirectMoves_SkipsOutOfRangeOrdinal(t *testing.T) {
 	t.Parallel()
 
-	// Two windows remain unclaimed besides the one at the entry's saved
-	// index, so there's still genuine ambiguity and no fallback tier
-	// should guess.
-	live := []window.AcrossSpacesEntry{liveEntry("One"), liveEntry("Two"), liveEntry("Three")}
-	entry := Entry{Title: "", Index: 0}
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {{BundleID: fallbackTestBundle, Title: "Report", Ordinal: 99}},
+	}
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {liveEntry("Report")},
+	}
 
-	got := matchWindowIndex(entry, live, map[int]bool{0: true})
-	if got != -1 {
-		t.Fatalf("matchWindowIndex() = %d, want -1 (index already used, still ambiguous)", got)
+	toMove, skipped, validOrdinals := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		map[string]map[int]bool{},
+		10,
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
+
+	if len(toMove) != 0 {
+		t.Fatalf("toMove = %#v, want none", toMove)
+	}
+
+	if len(skipped) != 1 || skipped[0].Reason != SkipOrdinalOutOfRange {
+		t.Fatalf("skipped = %#v, want one SkipOrdinalOutOfRange", skipped)
+	}
+
+	if len(validOrdinals) != 0 {
+		t.Fatalf("validAssignmentOrdinals = %#v, want none", validOrdinals)
+	}
+}
+
+// TestFallbackAndFuzzyMarkersAreDisjoint guards the invariant documented on
+// moveTarget: fallback placements (from planFallbackMoves) and fuzzy
+// matches (from planDirectMoves) come from disjoint code paths and must
+// never both be set on the same target.
+func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
+	t.Parallel()
+
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: "totally different", Index: 0, Ordinal: 4},
+		},
+	}
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {
+			fallbackLiveEntry(1, "totally different"),
+			fallbackLiveEntry(2, "unmatched"),
+		},
+	}
+	usedIndex := map[string]map[int]bool{}
+
+	directMoves, _, validOrdinals := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		usedIndex,
+		10,
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
+
+	fallbackMoves, _ := planFallbackMoves(
+		liveByBundle,
+		usedIndex,
+		validOrdinals,
+		func() (fallbackTarget, error) { return fallbackTarget{}, nil },
+		func(ordinal int) uint64 { return uint64(ordinal) },
+	)
+
+	for _, target := range append(directMoves, fallbackMoves...) {
+		if target.fallback && target.fuzzy {
+			t.Fatalf("target = %#v, want fallback and fuzzy never both true", target)
+		}
+	}
+
+	if len(directMoves) != 1 || directMoves[0].fallback {
+		t.Fatalf("directMoves = %#v, want one non-fallback match", directMoves)
+	}
+
+	if len(fallbackMoves) != 1 || fallbackMoves[0].fuzzy {
+		t.Fatalf("fallbackMoves = %#v, want one non-fuzzy fallback", fallbackMoves)
 	}
 }
 

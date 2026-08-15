@@ -39,10 +39,10 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			func() (int, error) {
+			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run for a unique target")
 
-				return 0, nil
+				return fallbackTarget{}, nil
 			},
 			func(ordinal int) uint64 {
 				if ordinal != 4 {
@@ -83,7 +83,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 		}
 	})
 
-	t.Run("uses the primary display target when assignments tie", func(t *testing.T) {
+	t.Run("uses the exact primary display space when assignments tie", func(t *testing.T) {
 		t.Parallel()
 
 		liveByBundle := map[string][]window.AcrossSpacesEntry{
@@ -103,13 +103,13 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			func() (int, error) { return 7, nil },
-			func(ordinal int) uint64 {
-				if ordinal != 7 {
-					t.Fatalf("fallback ordinal = %d, want 7", ordinal)
-				}
+			func() (fallbackTarget, error) {
+				return fallbackTarget{ordinal: 7, sid: 107}, nil
+			},
+			func(int) uint64 {
+				t.Fatal("tied fallback must use the primary display's resolved space ID")
 
-				return 107
+				return 0
 			},
 		)
 
@@ -146,7 +146,9 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			func() (int, error) { return 0, errPrimarySpaceUnavailable },
+			func() (fallbackTarget, error) {
+				return fallbackTarget{}, errPrimarySpaceUnavailable
+			},
 			func(int) uint64 {
 				t.Fatal("logical space lookup must not run after primary target resolution fails")
 
@@ -188,10 +190,10 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			map[string][]int{},
-			func() (int, error) {
+			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run without valid assignments")
 
-				return 0, nil
+				return fallbackTarget{}, nil
 			},
 			func(int) uint64 {
 				t.Fatal("logical space lookup must not run without valid assignments")

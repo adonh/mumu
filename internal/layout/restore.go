@@ -27,6 +27,11 @@ type SkippedEntry struct {
 	Entry    Entry
 	Reason   SkipReason
 	Fallback bool
+	// Fuzzy is set when the entry had already been matched to a window by
+	// approximate title similarity (see matchEntries) before the skip
+	// occurred, e.g. the move itself then failed. Never set together with
+	// Fallback — see moveTarget.
+	Fuzzy bool
 }
 
 // RestoreSummary reports the outcome of a Restore call.
@@ -63,6 +68,17 @@ type moveTarget struct {
 	sid      uint64
 	entry    Entry // for progress reporting and skip-detail on move failure
 	fallback bool
+	// fuzzy is set when this target's window was chosen by approximate
+	// (non-exact) title similarity rather than a perfect word-set match.
+	// fallback targets come only from planFallbackMoves, which never sets
+	// fuzzy, and fuzzy targets come only from planDirectMoves, which never
+	// sets fallback, so a single target is never both.
+	fuzzy bool
+}
+
+type fallbackTarget struct {
+	ordinal int
+	sid     uint64
 }
 
 func moveFailureSkip(target moveTarget) SkippedEntry {
@@ -70,22 +86,25 @@ func moveFailureSkip(target moveTarget) SkippedEntry {
 		Entry:    target.entry,
 		Reason:   SkipMoveFailed,
 		Fallback: target.fallback,
+		Fuzzy:    target.fuzzy,
 	}
 }
 
-// Restore applies a saved layout: for each saved window entry, it finds a
-// matching, currently open window belonging to an already-running
-// application and moves it to the space corresponding to the entry's
-// logical ordinal. Applications that are not currently running are skipped
-// and never launched. If an application now has exactly one window left
-// unclaimed, an otherwise-unmatched entry for it is matched to that window
-// regardless of title or saved position (see matchWindowIndex), since
-// there's no real ambiguity about which window it refers to. After direct
-// matches are established, any remaining windows for an application with
-// valid assignments use that application's prevalent target space; tied
-// targets use the current space on the primary display. Restore never creates
-// or removes spaces; entries whose target space no longer exists are skipped
-// and reported.
+// Restore applies a saved layout: for each application with saved window
+// entries, it batch-matches those entries against that application's
+// currently open windows by title similarity (see matchEntries) and moves
+// each matched window to the space corresponding to its entry's logical
+// ordinal. Applications that are not currently running are skipped and
+// never launched. Matching scores every remaining (entry, window) pair by
+// shared title words and commits pairs greedily from the highest score
+// down, so no open window is ever claimed by more than one saved entry; an
+// entry goes unmatched only once its application has no open window left
+// to claim. Matches whose title didn't exactly match are reported with a
+// "(fuzzy)" marker. After matching, any remaining windows for an
+// application with valid assignments use that application's prevalent
+// target space; tied targets use the current space on the primary display.
+// Restore never creates or removes spaces; entries whose target space no
+// longer exists are skipped and reported.
 //
 // sortKey determines both the order windows are moved in and the order
 // their per-window progress lines print in (see SortKey); it has no
@@ -117,79 +136,29 @@ func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSumm
 	}
 
 	liveByBundle := groupLiveByBundle(liveEntries)
+	entriesByBundle := groupEntriesByBundle(saved.Entries)
 	usedIndex := map[string]map[int]bool{}
-	validAssignmentOrdinals := map[string][]int{}
-	currentSpaceCount := space.LogicalCount()
 
-	var toMove []moveTarget
-
-	for _, entry := range saved.Entries {
-		live := liveByBundle[entry.BundleID]
-		if len(live) == 0 {
-			summary.Skipped = append(
-				summary.Skipped,
-				SkippedEntry{Entry: entry, Reason: SkipAppNotRunning},
-			)
-
-			continue
-		}
-
-		if usedIndex[entry.BundleID] == nil {
-			usedIndex[entry.BundleID] = map[int]bool{}
-		}
-
-		used := usedIndex[entry.BundleID]
-
-		matchIdx := matchWindowIndex(entry, live, used)
-		if matchIdx < 0 {
-			summary.Skipped = append(
-				summary.Skipped,
-				SkippedEntry{Entry: entry, Reason: SkipUnmatchedWindow},
-			)
-
-			continue
-		}
-
-		used[matchIdx] = true
-
-		if entry.Ordinal < 1 || entry.Ordinal > currentSpaceCount {
-			summary.Skipped = append(
-				summary.Skipped,
-				SkippedEntry{Entry: entry, Reason: SkipOrdinalOutOfRange},
-			)
-
-			continue
-		}
-
-		sid := space.LogicalSpaceID(entry.Ordinal)
-		if sid == 0 {
-			summary.Skipped = append(
-				summary.Skipped,
-				SkippedEntry{Entry: entry, Reason: SkipOrdinalOutOfRange},
-			)
-
-			continue
-		}
-
-		toMove = append(
-			toMove,
-			moveTarget{windowID: live[matchIdx].WindowID, sid: sid, entry: entry},
-		)
-		validAssignmentOrdinals[entry.BundleID] = append(
-			validAssignmentOrdinals[entry.BundleID],
-			entry.Ordinal,
-		)
-	}
+	directMoves, directSkipped, validAssignmentOrdinals := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		usedIndex,
+		space.LogicalCount(),
+		space.LogicalSpaceID,
+	)
+	summary.Skipped = append(summary.Skipped, directSkipped...)
 
 	fallbackMoves, fallbackSkipped := planFallbackMoves(
 		liveByBundle,
 		usedIndex,
 		validAssignmentOrdinals,
-		space.MenuBarActiveLogicalIndex,
+		primaryDisplayFallbackTarget,
 		space.LogicalSpaceID,
 	)
-	toMove = append(toMove, fallbackMoves...)
 	summary.Skipped = append(summary.Skipped, fallbackSkipped...)
+
+	toMove := directMoves
+	toMove = append(toMove, fallbackMoves...)
 
 	mcOrdinal := newMissionControlOrdinalLookup()
 	sort.SliceStable(toMove, func(i, j int) bool {
@@ -201,9 +170,13 @@ func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSumm
 	}
 
 	for moveIdx, target := range toMove {
-		fallbackMarker := ""
+		marker := ""
 		if target.fallback {
-			fallbackMarker = " (fallback)"
+			marker += " (fallback)"
+		}
+
+		if target.fuzzy {
+			marker += " (fuzzy)"
 		}
 
 		progress.emit(fmt.Sprintf(
@@ -212,7 +185,7 @@ func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSumm
 			space.DualLabel(target.entry.Ordinal),
 			target.entry.BundleID,
 			displayTitle(target.entry.Title),
-			fallbackMarker,
+			marker,
 		))
 
 		err := window.MoveWindowIDToSpace(target.windowID, target.sid)
@@ -243,72 +216,114 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 	return byBundle
 }
 
-// matchWindowIndex resolves a saved entry to the index of a currently open
-// window within the same application's live window list. It tries, in
-// order: (1) an exact, unambiguous title match; (2) the entry's saved
-// positional index, if still available; (3) whether exactly one of the
-// app's windows remains unclaimed, in which case there is no real
-// ambiguity about which window this entry refers to regardless of title or
-// saved position. The third tier matters for apps like browsers, whose
-// window title reflects page content and rarely matches across save and
-// restore, and for apps that had multiple windows saved but now have only
-// one open. Returns -1 if no candidate is available.
-func matchWindowIndex(entry Entry, live []window.AcrossSpacesEntry, used map[int]bool) int {
-	if entry.Title != "" {
-		matchIdx := -1
-		ambiguous := false
-
-		for candidateIdx, w := range live {
-			if used[candidateIdx] || w.Title != entry.Title {
-				continue
-			}
-
-			if matchIdx >= 0 {
-				ambiguous = true
-
-				break
-			}
-
-			matchIdx = candidateIdx
-		}
-
-		if matchIdx >= 0 && !ambiguous {
-			return matchIdx
-		}
+// planDirectMoves batch-matches each application's saved entries against
+// its currently open windows (see matchEntries) and resolves every match
+// to either a moveTarget or a skip reason. usedIndex is mutated in place
+// to record every live window index claimed by a match, keyed by bundle
+// ID, so planFallbackMoves can later see exactly which windows remain
+// unclaimed. The returned map records, per bundle ID, the logical
+// ordinals of every valid assignment, for planFallbackMoves to pick a
+// prevalent fallback target from.
+func planDirectMoves(
+	entriesByBundle map[string][]Entry,
+	liveByBundle map[string][]window.AcrossSpacesEntry,
+	usedIndex map[string]map[int]bool,
+	currentSpaceCount int,
+	logicalSpaceID func(int) uint64,
+) ([]moveTarget, []SkippedEntry, map[string][]int) {
+	bundleIDs := make([]string, 0, len(entriesByBundle))
+	for bundleID := range entriesByBundle {
+		bundleIDs = append(bundleIDs, bundleID)
 	}
 
-	if entry.Index >= 0 && entry.Index < len(live) && !used[entry.Index] {
-		return entry.Index
-	}
+	sort.Strings(bundleIDs)
 
-	return soleRemainingCandidate(live, used)
-}
+	var (
+		toMove  []moveTarget
+		skipped []SkippedEntry
+	)
 
-// soleRemainingCandidate returns the index of the only not-yet-claimed
-// window in live, or -1 if zero or more than one remain unclaimed.
-func soleRemainingCandidate(live []window.AcrossSpacesEntry, used map[int]bool) int {
-	sole := -1
+	validAssignmentOrdinals := map[string][]int{}
 
-	for candidateIdx := range live {
-		if used[candidateIdx] {
+	for _, bundleID := range bundleIDs {
+		entries := entriesByBundle[bundleID]
+		live := liveByBundle[bundleID]
+
+		if len(live) == 0 {
+			for _, entry := range entries {
+				skipped = append(
+					skipped,
+					SkippedEntry{Entry: entry, Reason: SkipAppNotRunning},
+				)
+			}
+
 			continue
 		}
 
-		if sole >= 0 {
-			return -1
+		used := usedIndex[bundleID]
+		if used == nil {
+			used = map[int]bool{}
+			usedIndex[bundleID] = used
 		}
 
-		sole = candidateIdx
+		matches := matchEntries(entries, live)
+
+		for i, entry := range entries {
+			matchIdx := matches[i]
+			if matchIdx < 0 {
+				skipped = append(
+					skipped,
+					SkippedEntry{Entry: entry, Reason: SkipUnmatchedWindow},
+				)
+
+				continue
+			}
+
+			used[matchIdx] = true
+
+			if entry.Ordinal < 1 || entry.Ordinal > currentSpaceCount {
+				skipped = append(
+					skipped,
+					SkippedEntry{Entry: entry, Reason: SkipOrdinalOutOfRange},
+				)
+
+				continue
+			}
+
+			sid := logicalSpaceID(entry.Ordinal)
+			if sid == 0 {
+				skipped = append(
+					skipped,
+					SkippedEntry{Entry: entry, Reason: SkipOrdinalOutOfRange},
+				)
+
+				continue
+			}
+
+			toMove = append(
+				toMove,
+				moveTarget{
+					windowID: live[matchIdx].WindowID,
+					sid:      sid,
+					entry:    entry,
+					fuzzy:    titleSimilarity(entry.Title, live[matchIdx].Title) < 1,
+				},
+			)
+			validAssignmentOrdinals[bundleID] = append(
+				validAssignmentOrdinals[bundleID],
+				entry.Ordinal,
+			)
+		}
 	}
 
-	return sole
+	return toMove, skipped, validAssignmentOrdinals
 }
 
 func planFallbackMoves(
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedByBundle map[string]map[int]bool,
 	assignmentOrdinals map[string][]int,
-	primaryDisplayOrdinal func() (int, error),
+	primaryDisplayTarget func() (fallbackTarget, error),
 	logicalSpaceID func(int) uint64,
 ) ([]moveTarget, []SkippedEntry) {
 	bundleIDs := make([]string, 0, len(assignmentOrdinals))
@@ -324,9 +339,9 @@ func planFallbackMoves(
 	)
 
 	for _, bundleID := range bundleIDs {
-		ordinal, hasTarget, err := fallbackTargetOrdinal(
+		target, hasTarget, err := fallbackTargetForAssignments(
 			assignmentOrdinals[bundleID],
-			primaryDisplayOrdinal,
+			primaryDisplayTarget,
 		)
 		if !hasTarget {
 			continue
@@ -340,10 +355,9 @@ func planFallbackMoves(
 			usedByBundle[bundleID] = used
 		}
 
-		sid := uint64(0)
-		if err == nil {
-			sid = logicalSpaceID(ordinal)
-			if sid == 0 {
+		if err == nil && target.sid == 0 {
+			target.sid = logicalSpaceID(target.ordinal)
+			if target.sid == 0 {
 				err = derrors.New(
 					derrors.CodeActionFailed,
 					"failed to resolve fallback space",
@@ -360,7 +374,7 @@ func planFallbackMoves(
 				BundleID: bundleID,
 				Title:    liveEntry.Title,
 				Index:    -1,
-				Ordinal:  ordinal,
+				Ordinal:  target.ordinal,
 			}
 			if err != nil {
 				skipped = append(
@@ -381,7 +395,7 @@ func planFallbackMoves(
 				targets,
 				moveTarget{
 					windowID: liveEntry.WindowID,
-					sid:      sid,
+					sid:      target.sid,
 					entry:    entry,
 					fallback: true,
 				},
@@ -392,12 +406,21 @@ func planFallbackMoves(
 	return targets, skipped
 }
 
-func fallbackTargetOrdinal(
+func primaryDisplayFallbackTarget() (fallbackTarget, error) {
+	spaceID, ordinal, err := space.PrimaryDisplayCurrentSpace()
+	if err != nil {
+		return fallbackTarget{}, err
+	}
+
+	return fallbackTarget{ordinal: ordinal, sid: spaceID}, nil
+}
+
+func fallbackTargetForAssignments(
 	assignmentOrdinals []int,
-	primaryDisplayOrdinal func() (int, error),
-) (int, bool, error) {
+	primaryDisplayTarget func() (fallbackTarget, error),
+) (fallbackTarget, bool, error) {
 	if len(assignmentOrdinals) == 0 {
-		return 0, false, nil
+		return fallbackTarget{}, false, nil
 	}
 
 	counts := map[int]int{}
@@ -419,22 +442,22 @@ func fallbackTargetOrdinal(
 	}
 
 	if !tied {
-		return ordinal, true, nil
+		return fallbackTarget{ordinal: ordinal}, true, nil
 	}
 
-	primaryOrdinal, err := primaryDisplayOrdinal()
+	target, err := primaryDisplayTarget()
 	if err != nil {
-		return 0, true, err
+		return fallbackTarget{}, true, err
 	}
 
-	if primaryOrdinal < 1 {
-		return 0, true, derrors.New(
+	if target.ordinal < 1 || target.sid == 0 {
+		return fallbackTarget{}, true, derrors.New(
 			derrors.CodeActionFailed,
-			"failed to resolve the primary display's current logical space",
+			"failed to resolve the primary display's current space",
 		)
 	}
 
-	return primaryOrdinal, true, nil
+	return target, true, nil
 }
 
 func intSlicesEqual(left, right []int) bool {

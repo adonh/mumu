@@ -21,6 +21,10 @@ mumu restore     # put matching, already-open windows back
 
 > **Early development** — CLI and behavior may change between releases.
 
+> [!NOTE]
+> mumu's core is based on [mimi](https://github.com/y3owk1n/mimi) but with a focus on layout instead of
+> individual windows and spaces.
+
 ---
 
 ## Install
