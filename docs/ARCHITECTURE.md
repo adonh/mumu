@@ -19,7 +19,9 @@ Layout capture enumerates windows via `CGWindowListCopyWindowInfo(kCGWindowListO
 
 Space numbers are "logical left-to-right": each display's Spaces (already primary-first via `SLSCopyManagedDisplaySpaces`) are concatenated in physical left-to-right display order (`CGDisplayBounds.origin.x`), independent of which display macOS considers primary. This differs from the macOS Mission Control ordering, which always lists the primary display's Spaces first; `mumu` resolves and displays both numbers side by side (see [CLI Guide — Space Numbering](CLI.md#space-numbering)).
 
-Layouts are persisted as JSON under `~/.local/share/mumu/layouts/<display-count>.json`, keyed by the number of currently connected displays. Restore only moves windows belonging to already-running applications to already-existing Spaces — it never launches apps, and never creates or removes Spaces.
+Layouts are persisted as internal state: one JSON file per display count (`<display-count>.json`), inside a `layouts` subdirectory of mumu's data directory (`data_dir`). Restore only moves windows belonging to already-running applications to already-existing Spaces — it never launches apps, and never creates or removes Spaces. These files aren't meant for hand-editing — see [`docs/CONFIG_SCHEMA.md`](CONFIG_SCHEMA.md) for the full field-level schema.
+
+`mumu`'s own settings live in an explicit, user-editable `config.yaml`, resolved as `$XDG_CONFIG_HOME/mumu/config.yaml` if `XDG_CONFIG_HOME` is set, otherwise `~/Library/Application Support/mumu/config.yaml`. It's auto-created with commented defaults on first use, including `data_dir` — the directory whose `layouts/` subdirectory holds saved layouts, which defaults to `$XDG_DATA_HOME/mumu` if `XDG_DATA_HOME` is set, otherwise `~/Library/Application Support/mumu` (colocated with `config.yaml` by default). Editing `data_dir` moves where mumu reads and writes saved layouts. Any YAML mumu writes, including `config.yaml`, uses two-space indentation. See [`docs/examples/config.yaml`](examples/config.yaml) for a sample and [`docs/CONFIG_SCHEMA.md`](CONFIG_SCHEMA.md) for the schema.
 
 Space-to-Space window moves use the private SkyLight API (`SLSMoveWindowsToManagedSpace` and friends) for instant, animation-free relocation, without requiring an `AXUIElementRef` (layout-discovered windows come from CGWindowList, identified by `CGWindowID`, not AX).
 
@@ -31,6 +33,7 @@ Space-to-Space window moves use the private SkyLight API (`SLSMoveWindowsToManag
 cmd/mumu/           CLI entry point and commands
 internal/
   layout/           Layout save/restore: capture, JSON persistence, restore matching
+  config/           config.yaml resolution, auto-creation, and loading
   window/           Go wrappers for AX window APIs and CGWindowList-based window moves
   space/            Mission Control space operations, logical left-to-right numbering
   native/           Objective-C + CGO bridge (window/space APIs, layout enumeration)
@@ -43,7 +46,7 @@ internal/
 
 ## Permissions
 
-`mumu save` and `mumu restore` check for both **Accessibility** and **Screen Recording** before doing any work, since both are required to enumerate windows and read their titles reliably. `mumu show`, `list`, and `delete` only read or write the local JSON layout file and don't perform a permission check. `mumu status` reports both permissions without touching any window, Space, or layout file.
+`mumu save` and `mumu restore` check for both **Accessibility** and **Screen Recording** before doing any work, since both are required to enumerate windows and read their titles reliably. `mumu show`, `list`, and `delete` only read or write the local saved-layout JSON files and don't perform a permission check. `mumu status` reports both permissions without touching any window, Space, or layout file.
 
 ---
 

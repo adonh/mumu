@@ -19,7 +19,8 @@ just build
 ```
 cmd/mumu/              CLI binary
 internal/
-  layout/              Layout save/restore: capture, JSON persistence, restore matching
+  layout/              Layout save/restore: capture, YAML persistence, restore matching
+  config/              config.yaml resolution, auto-creation, and loading
   window/              AX window wrappers and CGWindowList-based window moves
   space/               Mission Control operations, logical left-to-right numbering
   native/              Obj-C + CGO bridge (window/space APIs, layout enumeration)

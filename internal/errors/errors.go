@@ -44,7 +44,7 @@ const (
 	// CodeConfigIOFailed indicates configuration file I/O failed.
 	CodeConfigIOFailed Code = "CONFIG_IO_FAILED"
 
-	// CodeSerializationFailed indicates JSON/TOML serialization/deserialization failed.
+	// CodeSerializationFailed indicates JSON/YAML/TOML serialization/deserialization failed.
 	CodeSerializationFailed Code = "SERIALIZATION_FAILED"
 
 	// CodeBridgeFailed indicates a failure in native bridge interactions.

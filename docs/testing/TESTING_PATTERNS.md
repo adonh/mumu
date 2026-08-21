@@ -24,7 +24,7 @@ func TestService_Method_EdgeCase(t *testing.T)
 | Scenario           | Test Type   | Example                            |
 | ------------------ | ----------- | ---------------------------------- |
 | Business logic     | Unit        | Restore matching, sort ordering    |
-| Serialization       | Unit        | Layout JSON encode/decode round-trip |
+| Serialization       | Unit        | Layout/config YAML encode/decode round-trip |
 | Platform API calls | Integration | Window/space enumeration, CGO bridge |
 | File operations    | Integration | Layout file persistence            |
 
