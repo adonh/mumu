@@ -9,8 +9,11 @@ BUILD_DATE := `date -u +"%Y-%m-%dT%H:%M:%SZ"`
 
 LDFLAGS := "-s -w -X github.com/adonh/mumu/cmd/mumu/cmd.Version=" + VERSION + " -X github.com/adonh/mumu/cmd/mumu/cmd.GitCommit=" + GIT_COMMIT + " -X github.com/adonh/mumu/cmd/mumu/cmd.BuildDate=" + BUILD_DATE
 
-# Default build
-default: build
+@help *RECIPE:
+    set -- {{RECIPE}} ; \
+    [ -n "${1-}" ] && \
+      just --usage "$@" || \
+        just --list
 
 # Build the binary
 build:
@@ -161,3 +164,26 @@ verify:
     @echo "Verifying dependencies..."
     go mod verify
     @echo "✓ Dependencies verified"
+
+alias setup-pre-commit := setup-prek
+setup-prek:
+    if command -v prek >/dev/null; then \
+      uv tool upgrade prek; \
+    else \
+      uv tool install prek; \
+    fi; \
+    if [ -f .git/hooks/pre-commit ]; then \
+      if grep -q ' pre-commit ' .git/hooks/pre-commit; then \
+        uv tool run prek install -f; \
+      fi; \
+    else \
+      uv tool run prek install; \
+    fi
+
+openspec-update:
+    openspec init --tools claude,cline,codex,cursor,devin,github-copilot && \
+    openspec config profile core && \
+    openspec update --force
+
+setup: setup-prek openspec-update
+    @printf '\nReady!!!\n'
