@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/adonh/mumu/internal/config"
 	derrors "github.com/adonh/mumu/internal/errors"
 	"github.com/adonh/mumu/internal/layout"
 	"github.com/adonh/mumu/internal/space"
@@ -102,6 +103,11 @@ Use --yes to skip the prompt.`,
 			return err
 		}
 
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
 		drift := layout.DetectDrift(saved)
 		if drift.Mismatched() {
 			cmd.Println("Warning: the current display arrangement doesn't match what was saved.")
@@ -116,7 +122,13 @@ Use --yes to skip the prompt.`,
 			}
 		}
 
-		summary, err := layout.Restore(saved, sortKey, func(msg string) { cmd.Println(msg) })
+		summary, err := layout.Restore(
+			saved,
+			cfg.Pins[displayCount],
+			cfg.PinPrecedence,
+			sortKey,
+			func(msg string) { cmd.Println(msg) },
+		)
 		if err != nil {
 			return err
 		}
@@ -234,6 +246,11 @@ connected displays.`,
 			return err
 		}
 
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+
 		cmd.Printf(
 			"Layout for %d display(s), saved %s\n",
 			saved.DisplayCount,
@@ -255,6 +272,8 @@ connected displays.`,
 				displayTitle(entry.Title),
 			)
 		}
+
+		printConfiguredPins(cmd, cfg.Pins[displayCount])
 
 		return nil
 	},
@@ -349,6 +368,27 @@ func displayTitle(title string) string {
 	}
 
 	return title
+}
+
+// printConfiguredPins prints a display count's configured pin rules as
+// written in config.yaml — no window matching is performed. Prints
+// nothing when no pins are configured, leaving the rest of "mumu show"'s
+// output unaffected.
+func printConfiguredPins(cmd *cobra.Command, pins []config.PinRule) {
+	if len(pins) == 0 {
+		return
+	}
+
+	cmd.Printf("%d configured pin(s):\n", len(pins))
+
+	for _, pin := range pins {
+		cmd.Printf(
+			"  %s — %s — %q\n",
+			space.DualLabel(pin.Space),
+			pin.BundleID,
+			displayTitle(pin.Title),
+		)
+	}
 }
 
 func printRestoreSummary(

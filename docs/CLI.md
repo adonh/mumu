@@ -9,6 +9,7 @@
 - [Global Flags](#global-flags)
 - [Space Numbering](#space-numbering)
 - [Output Ordering (`--sort`)](#output-ordering---sort)
+- [Pinned Windows](#pinned-windows)
 - [`mumu save`](#mumu-save)
 - [`mumu restore`](#mumu-restore---yes---sort-displaymacosapp)
 - [`mumu list`](#mumu-list)
@@ -44,6 +45,14 @@ Because this can diverge from macOS's own Mission Control ordering whenever the 
 
 Whichever key is primary, entries that tie on it are ordered by falling back through the other two keys, in the fixed priority Space number, then bundle identifier, then window title — so output is always fully deterministic. This ordering applies to `show`'s entry list, restore's per-window move progress lines, and the ordering of entries within each reason group of restore's skip summary.
 
+## Pinned Windows
+
+`config.yaml`'s `pins` setting lets you declare fixed application-window-to-Space assignments per display count — e.g. always keep Slack on Space 1 — without needing to re-save a layout whenever it drifts. See [Configuration Schema — `config.yaml`](CONFIG_SCHEMA.md#configyaml) for the full field reference.
+
+Pins only take effect as part of `mumu restore` — there's no separate command to apply them, and they never launch an app or take effect without a saved layout for the current display count (restore still requires one). Restore matches a display count's configured pins against that application's currently open windows using the exact same approximate title-matching `mumu restore` already uses for saved layouts, then moves matched windows to their pinned Space, subject to the same "app must be running" and "target Space must exist" rules. `config.yaml`'s `pin_precedence` setting (`pin`, the default, or `layout`) controls which wins — pins or the saved layout — when both would otherwise claim the same open window.
+
+`mumu show` also lists a display count's configured pins (as written, without matching them against any open window) alongside its saved layout.
+
 ---
 
 ## `mumu save`
@@ -59,6 +68,8 @@ mumu save
 Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). For each app, its saved entries and currently open windows are matched as a single batch: every remaining entry is scored against every remaining window by title similarity (shared words, ignoring case and word order), and the closest-matching pairs are assigned first, so no open window is ever claimed by more than one saved entry — this matters for apps like browsers, whose titles rarely match exactly across save and restore. An entry goes unmatched only once its app has no open window left to claim. Ties are broken by the entry's saved position, then deterministically, rather than left unresolved. After matching, remaining open windows from an app with a valid assignment move to that app's most prevalent target Space. If its target Spaces are tied, they move to the Space currently shown on the primary (menu-bar) display, so they are immediately visible; apps with no valid assignment are left unchanged. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
 
 If the current per-display Space-count arrangement doesn't match what was recorded at save time, you'll be prompted to confirm before any windows move. Pass `--yes` (or `-y`) to skip the prompt (e.g. for scripting).
+
+Also applies any pins configured for the current display count (see [Pinned Windows](#pinned-windows)) — matched the same way, and moved/skipped/reported alongside saved-layout entries in the output below.
 
 ```bash
 mumu restore
@@ -78,7 +89,7 @@ mumu list
 
 ## `mumu show [display-count] [--sort display|macos|app]`
 
-Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order).
+Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order). Also lists that display count's configured pins (see [Pinned Windows](#pinned-windows)) as written in `config.yaml`, without matching them against any currently open window.
 
 ```bash
 mumu show

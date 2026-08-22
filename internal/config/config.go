@@ -10,6 +10,31 @@ import (
 	"github.com/adonh/mumu/internal/paths"
 )
 
+// PinPrecedence controls whether pin rules or saved-layout entries win
+// when both would otherwise claim the same currently open window during
+// restore (see the window-pinning capability).
+type PinPrecedence string
+
+// Valid PinPrecedence values.
+const (
+	PinPrecedencePin    PinPrecedence = "pin"
+	PinPrecedenceLayout PinPrecedence = "layout"
+)
+
+// PinRule is a single user-configured app+title-pattern-to-Space pin, matched
+// during restore using the same title-similarity heuristic saved-layout
+// entries use.
+type PinRule struct {
+	// BundleID is the pinned application's bundle identifier.
+	BundleID string
+	// Title is the approximate title pattern matched against that
+	// application's currently open window titles.
+	Title string
+	// Space is the target logical left-to-right Space ordinal (see
+	// internal/space's logical numbering).
+	Space int
+}
+
 // Config holds mumu's user-editable settings, loaded from its config.yaml.
 type Config struct {
 	// DataDir is the directory mumu uses to store its data (currently
@@ -17,6 +42,12 @@ type Config struct {
 	// layouts, one internal JSON file per display count), with any
 	// leading "~" already expanded to an absolute path.
 	DataDir string
+	// Pins maps a connected-display-count to the pin rules configured
+	// for it. A display count with no configured pins has no entry.
+	Pins map[int][]PinRule
+	// PinPrecedence controls pin-vs-saved-layout precedence during
+	// restore. Defaults to PinPrecedencePin.
+	PinPrecedence PinPrecedence
 }
 
 const (
@@ -31,9 +62,22 @@ const (
 	dirMode  = 0o755
 )
 
+// pinRuleFileFormat is the on-disk shape of one entry under a config.yaml
+// "pins" display-count list.
+type pinRuleFileFormat struct {
+	BundleID string `yaml:"bundle_id"` //nolint:tagliatelle // Stable user-facing config key name.
+	Title    string `yaml:"title"`
+	Space    int    `yaml:"space"`
+}
+
 // fileFormat is the on-disk shape of config.yaml.
 type fileFormat struct {
 	DataDir string `yaml:"data_dir"` //nolint:tagliatelle // Stable user-facing config key name.
+	// Pins maps a display count to its list of pin rules. Absent or empty
+	// means no pins are configured for that display count.
+	Pins map[int][]pinRuleFileFormat `yaml:"pins"`
+	// PinPrecedence is "pin" or "layout"; empty means the default ("pin").
+	PinPrecedence string `yaml:"pin_precedence"` //nolint:tagliatelle // Stable user-facing config key name.
 }
 
 // FilePath resolves the path to mumu's configuration file: it follows
@@ -93,7 +137,97 @@ func Load() (*Config, error) {
 		)
 	}
 
-	return &Config{DataDir: paths.ExpandHome(parsed.DataDir)}, nil
+	pins, err := validatePins(path, parsed.Pins)
+	if err != nil {
+		return nil, err
+	}
+
+	precedence, err := validatePinPrecedence(path, parsed.PinPrecedence)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{
+		DataDir:       paths.ExpandHome(parsed.DataDir),
+		Pins:          pins,
+		PinPrecedence: precedence,
+	}, nil
+}
+
+// validatePins checks every configured pin rule has a non-empty bundle_id
+// and title and a positive space ordinal, returning a clear error naming
+// the config file path and the offending entry otherwise.
+func validatePins(path string, raw map[int][]pinRuleFileFormat) (map[int][]PinRule, error) {
+	if len(raw) == 0 {
+		return map[int][]PinRule{}, nil
+	}
+
+	pins := make(map[int][]PinRule, len(raw))
+
+	for displayCount, rules := range raw {
+		converted := make([]PinRule, 0, len(rules))
+
+		for _, rule := range rules {
+			if rule.BundleID == "" {
+				return nil, derrors.Newf(
+					derrors.CodeInvalidConfig,
+					"config file %s: pins for %d display(s): bundle_id must be a non-empty string",
+					path,
+					displayCount,
+				)
+			}
+
+			if rule.Title == "" {
+				return nil, derrors.Newf(
+					derrors.CodeInvalidConfig,
+					"config file %s: pins for %d display(s), app %s: title must be a non-empty string",
+					path,
+					displayCount,
+					rule.BundleID,
+				)
+			}
+
+			if rule.Space <= 0 {
+				return nil, derrors.Newf(
+					derrors.CodeInvalidConfig,
+					"config file %s: pins for %d display(s), app %s: space must be a positive integer, got %d",
+					path,
+					displayCount,
+					rule.BundleID,
+					rule.Space,
+				)
+			}
+
+			converted = append(converted, PinRule(rule))
+		}
+
+		pins[displayCount] = converted
+	}
+
+	return pins, nil
+}
+
+// validatePinPrecedence resolves the raw pin_precedence string to a
+// PinPrecedence, defaulting to PinPrecedencePin when absent and reporting a
+// clear error for any other value.
+func validatePinPrecedence(path, raw string) (PinPrecedence, error) {
+	switch raw {
+	case "":
+		return PinPrecedencePin, nil
+	case string(PinPrecedencePin):
+		return PinPrecedencePin, nil
+	case string(PinPrecedenceLayout):
+		return PinPrecedenceLayout, nil
+	default:
+		return "", derrors.Newf(
+			derrors.CodeInvalidConfig,
+			"config file %s: pin_precedence must be %q or %q, got %q",
+			path,
+			PinPrecedencePin,
+			PinPrecedenceLayout,
+			raw,
+		)
+	}
 }
 
 func createDefault(path string) (*Config, error) {
@@ -109,7 +243,7 @@ func createDefault(path string) (*Config, error) {
 		return nil, derrors.Wrapf(err, derrors.CodeConfigIOFailed, "writing default config file")
 	}
 
-	return &Config{DataDir: paths.ExpandHome(dataDirRaw)}, nil
+	return &Config{DataDir: paths.ExpandHome(dataDirRaw), PinPrecedence: PinPrecedencePin}, nil
 }
 
 func defaultConfigYAML(dataDir string) string {
@@ -120,5 +254,24 @@ func defaultConfigYAML(dataDir string) string {
 		"# per display count). Supports a leading \"~\" for your home directory.\n" +
 		"# Defaults to $XDG_DATA_HOME/mumu if XDG_DATA_HOME is set, otherwise\n" +
 		"# ~/Library/Application Support/mumu.\n" +
-		"data_dir: " + dataDir + "\n"
+		"data_dir: " + dataDir + "\n" +
+		"\n" +
+		"# pins: fixed application-window-to-Space assignments, applied by\n" +
+		"# \"mumu restore\", keyed by the number of connected displays (different\n" +
+		"# display counts can declare entirely different pins). Each rule needs\n" +
+		"# an app's bundle_id, an approximate title pattern (matched the same way\n" +
+		"# restore matches saved layouts), and a target space (mumu's logical\n" +
+		"# left-to-right Space number). Absent or empty means no pins.\n" +
+		"#\n" +
+		"# pins:\n" +
+		"#   2:\n" +
+		"#     - bundle_id: com.tinyspeck.slackmacgap\n" +
+		"#       title: \"Slack\"\n" +
+		"#       space: 1\n" +
+		"\n" +
+		"# pin_precedence: whether pins (\"pin\", the default) or the saved layout\n" +
+		"# (\"layout\") wins when both would claim the same open window during\n" +
+		"# \"mumu restore\".\n" +
+		"#\n" +
+		"# pin_precedence: pin\n"
 }

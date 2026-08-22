@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/adonh/mumu/internal/config"
 	derrors "github.com/adonh/mumu/internal/errors"
 	"github.com/adonh/mumu/internal/space"
 	"github.com/adonh/mumu/internal/window"
@@ -110,13 +111,28 @@ func moveFailureSkip(target moveTarget) SkippedEntry {
 // their per-window progress lines print in (see SortKey); it has no
 // effect on which windows are matched, moved, or skipped.
 //
+// pins and precedence apply the window-pinning capability: pins are
+// matched against currently open windows the same way saved entries are,
+// and precedence controls whether pin matching or saved-layout matching
+// (including its own application-level fallback) runs first and claims
+// windows before the other. Pins never receive an application-level
+// fallback of their own — an unmatched pin is simply skipped. Pass a nil
+// or empty pins slice when no pins are configured for the current display
+// count.
+//
 // progress, if non-nil, receives status updates while windows are scanned
 // and moved — the latter can take a while since each move is paced to let
 // WindowServer catch up; pass nil to discard them.
 //
 // Callers are responsible for any arrangement-drift confirmation prompt
 // (see DetectDrift) before calling Restore.
-func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSummary, error) {
+func Restore(
+	saved *Layout,
+	pins []config.PinRule,
+	precedence config.PinPrecedence,
+	sortKey SortKey,
+	progress ProgressFunc,
+) (RestoreSummary, error) {
 	summary := RestoreSummary{}
 
 	err := ensureLayoutPermissions()
@@ -137,28 +153,56 @@ func Restore(saved *Layout, sortKey SortKey, progress ProgressFunc) (RestoreSumm
 
 	liveByBundle := groupLiveByBundle(liveEntries)
 	entriesByBundle := groupEntriesByBundle(saved.Entries)
-	usedIndex := map[string]map[int]bool{}
+	pinsByBundle := pinEntriesByBundle(pins)
 
-	directMoves, directSkipped, validAssignmentOrdinals := planDirectMoves(
-		entriesByBundle,
-		liveByBundle,
-		usedIndex,
-		space.LogicalCount(),
-		space.LogicalSpaceID,
+	var (
+		directMoves, fallbackMoves, pinMoves       []moveTarget
+		directSkipped, fallbackSkipped, pinSkipped []SkippedEntry
 	)
+
+	if precedence == config.PinPrecedenceLayout {
+		directMoves, directSkipped, fallbackMoves, fallbackSkipped = planLayoutPhase(
+			entriesByBundle,
+			liveByBundle,
+		)
+
+		claimed := claimedWindowIDs(
+			append(append([]moveTarget{}, directMoves...), fallbackMoves...),
+		)
+		pinLiveByBundle := filterLiveByBundle(liveByBundle, claimed)
+
+		pinMoves, pinSkipped, _ = planDirectMoves(
+			pinsByBundle,
+			pinLiveByBundle,
+			map[string]map[int]bool{},
+			space.LogicalCount(),
+			space.LogicalSpaceID,
+		)
+	} else {
+		pinMoves, pinSkipped, _ = planDirectMoves(
+			pinsByBundle,
+			liveByBundle,
+			map[string]map[int]bool{},
+			space.LogicalCount(),
+			space.LogicalSpaceID,
+		)
+
+		claimed := claimedWindowIDs(pinMoves)
+		layoutLiveByBundle := filterLiveByBundle(liveByBundle, claimed)
+
+		directMoves, directSkipped, fallbackMoves, fallbackSkipped = planLayoutPhase(
+			entriesByBundle,
+			layoutLiveByBundle,
+		)
+	}
+
 	summary.Skipped = append(summary.Skipped, directSkipped...)
-
-	fallbackMoves, fallbackSkipped := planFallbackMoves(
-		liveByBundle,
-		usedIndex,
-		validAssignmentOrdinals,
-		primaryDisplayFallbackTarget,
-		space.LogicalSpaceID,
-	)
 	summary.Skipped = append(summary.Skipped, fallbackSkipped...)
+	summary.Skipped = append(summary.Skipped, pinSkipped...)
 
 	toMove := directMoves
 	toMove = append(toMove, fallbackMoves...)
+	toMove = append(toMove, pinMoves...)
 
 	mcOrdinal := newMissionControlOrdinalLookup()
 	sort.SliceStable(toMove, func(i, j int) bool {
@@ -214,6 +258,37 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 	}
 
 	return byBundle
+}
+
+// planLayoutPhase runs saved-layout direct matching and its
+// application-level fallback as a self-contained unit against the given
+// live-window pool, with its own fresh usedIndex map so the two calls
+// stay internally consistent regardless of whether liveByBundle is the
+// full live-window pool or one already filtered to exclude windows a
+// higher-precedence pin phase claimed.
+func planLayoutPhase(
+	entriesByBundle map[string][]Entry,
+	liveByBundle map[string][]window.AcrossSpacesEntry,
+) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
+	usedIndex := map[string]map[int]bool{}
+
+	direct, directSkipped, validAssignmentOrdinals := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		usedIndex,
+		space.LogicalCount(),
+		space.LogicalSpaceID,
+	)
+
+	fallback, fallbackSkipped := planFallbackMoves(
+		liveByBundle,
+		usedIndex,
+		validAssignmentOrdinals,
+		primaryDisplayFallbackTarget,
+		space.LogicalSpaceID,
+	)
+
+	return direct, directSkipped, fallback, fallbackSkipped
 }
 
 // planDirectMoves batch-matches each application's saved entries against
