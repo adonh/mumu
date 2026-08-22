@@ -1,0 +1,58 @@
+## MODIFIED Requirements
+
+### Requirement: Config file format
+
+The configuration file SHALL be valid YAML understood by a human editor without external documentation, and SHALL support at minimum a `data_dir` setting: the directory mumu uses to store its data (see the `space-layout` capability for what that data contains). Values in `data_dir` SHALL support a leading `~` expanding to the user's home directory.
+
+The configuration file SHALL also support a `pins` setting: a mapping from connected-display-count to a list of pin rules (see the `window-pinning` capability), each rule specifying an application bundle identifier, a window-title pattern, and a target logical Space ordinal. The configuration file SHALL also support a `pin_precedence` setting with the value `pin` or `layout`, controlling pin-vs-saved-layout precedence during `mumu restore` (see the `window-pinning` capability), defaulting to `pin` when absent.
+
+#### Scenario: Setting a custom data directory
+
+- **WHEN** a user edits the configuration file's `data_dir` setting to `~/mumu-data` and saves the file
+- **THEN** subsequent `mumu` commands use `~/mumu-data` (expanded to an absolute path) as the data directory
+
+#### Scenario: Default data directory when unset
+
+- **WHEN** the configuration file's `data_dir` setting is absent or the configuration file was just auto-created with defaults
+- **THEN** the system uses `$XDG_DATA_HOME/mumu` as the data directory if `XDG_DATA_HOME` is set, and otherwise `~/Library/Application Support/mumu`
+
+#### Scenario: Configuring pins for a display count
+
+- **WHEN** a user adds a display-count entry under `pins` in the configuration file, listing one or more rules each with an application bundle identifier, a title pattern, and a target Space ordinal
+- **THEN** those rules are available to `mumu restore` and `mumu show` for that display count
+
+#### Scenario: Pins setting absent
+
+- **WHEN** the configuration file has no `pins` setting
+- **THEN** the system behaves as if no pin rules are configured for any display count, and `mumu restore` proceeds using only saved-layout matching
+
+#### Scenario: Default pin precedence when unset
+
+- **WHEN** the configuration file has no `pin_precedence` setting
+- **THEN** the system treats pin rules as taking precedence over saved-layout entries during `mumu restore`
+
+### Requirement: Invalid config file is reported clearly
+
+If the configuration file exists but cannot be parsed as valid YAML, or contains a `data_dir` value that is not a non-empty string, the system SHALL report a clear error identifying the configuration file path and SHALL make no changes to any window, Space, or saved layout.
+
+If the configuration file's `pins` setting is present but is not a mapping from display count to a list of pin rules, or any pin rule is missing its application bundle identifier, title pattern, or target Space ordinal, or its target Space ordinal is not a positive integer, the system SHALL report a clear error identifying the configuration file path and the offending entry, and SHALL make no changes to any window, Space, or saved layout. If the configuration file's `pin_precedence` setting is present but is not `pin` or `layout`, the system SHALL report a clear error identifying the configuration file path, and SHALL make no changes.
+
+#### Scenario: Malformed YAML
+
+- **WHEN** a user runs a `mumu` command and the configuration file contains invalid YAML syntax
+- **THEN** the system reports an error naming the configuration file path and makes no changes
+
+#### Scenario: Invalid data_dir value
+
+- **WHEN** a user runs a `mumu` command and the configuration file's `data_dir` setting is present but empty or not a string
+- **THEN** the system reports a clear error and makes no changes
+
+#### Scenario: Invalid pin rule
+
+- **WHEN** a user runs a `mumu` command and the configuration file's `pins` setting contains a rule missing its title pattern or with a non-positive target Space ordinal
+- **THEN** the system reports a clear error identifying the configuration file path and the offending rule, and makes no changes
+
+#### Scenario: Invalid pin_precedence value
+
+- **WHEN** a user runs a `mumu` command and the configuration file's `pin_precedence` setting is present but is neither `pin` nor `layout`
+- **THEN** the system reports a clear error identifying the configuration file path, and makes no changes

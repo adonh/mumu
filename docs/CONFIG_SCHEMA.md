@@ -4,20 +4,50 @@ Reference for `config.yaml`, the one file `mumu` expects a user to read or edit,
 
 ## `config.yaml`
 
-mumu's own settings. One top-level key.
+mumu's own settings.
 
-| Key        | Type   | Required | Default                                                            | Notes                                                                                        |
-| ---------- | ------ | -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `data_dir` | string | yes      | `$XDG_DATA_HOME/mumu` if set, else `~/Library/Application Support/mumu` | Directory mumu's `layouts/` subdirectory lives in. A leading `~` is expanded to the home directory. Must be a non-empty string. |
+| Key              | Type                                             | Required | Default                                                            | Notes                                                                                        |
+| ---------------- | ------------------------------------------------- | -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `data_dir`       | string                                             | yes      | `$XDG_DATA_HOME/mumu` if set, else `~/Library/Application Support/mumu` | Directory mumu's `layouts/` subdirectory lives in. A leading `~` is expanded to the home directory. Must be a non-empty string. |
+| `pins`           | map of display count (int) to list of [pin rule](#pin-rule-object) | no | none (no pins configured) | Fixed application-window-to-Space assignments `mumu restore` applies, keyed by the number of connected displays. Different display counts can declare entirely different pins. |
+| `pin_precedence` | string (`pin` or `layout`)                         | no       | `pin`                                                                | Whether pin rules (`pin`) or saved-layout entries (`layout`) win when both would claim the same open window during `mumu restore`. |
 
 ```yaml
 data_dir: ~/Library/Application Support/mumu
+
+pins:
+  2:
+    - bundle_id: com.tinyspeck.slackmacgap
+      title: "general"
+      space: 1
+  4:
+    - bundle_id: com.tinyspeck.slackmacgap
+      title: "general"
+      space: 1
+    - bundle_id: com.google.Chrome
+      title: "GitHub"
+      space: 5
+
+pin_precedence: pin
 ```
+
+### Pin rule object
+
+One entry under a `pins` display-count list.
+
+| Key         | Type   | Notes                                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `bundle_id` | string | The pinned application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
+| `title`     | string | Approximate title pattern, matched the same way `mumu restore` matches saved-layout entries against open windows (shared-word similarity, not an exact match). Must be a non-empty string. |
+| `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
 
 Loading rules:
 
 - If `config.yaml` doesn't exist yet, it's auto-created with commented defaults (see `defaultConfigYAML` in `internal/config/config.go`) and never overwritten afterward.
 - Missing/empty `data_dir`, or a `data_dir` value that isn't a plain string, is a load error (`CodeInvalidConfig`) — the process exits rather than silently falling back to a default.
+- A missing `pins` setting means no pins are configured for any display count; `mumu restore` proceeds using only its saved-layout matching.
+- Any pin rule missing `bundle_id` or `title`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
+- A `pin_precedence` value other than `pin` or `layout` is a load error (`CodeInvalidConfig`).
 - Malformed YAML is a load error (`CodeInvalidConfig`).
 - Unrecognized top-level keys are ignored (forward-compatible), not rejected.
 - Any YAML mumu writes, including `config.yaml`, uses two-space indentation.
