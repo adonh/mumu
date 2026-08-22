@@ -34,7 +34,7 @@ brew tap adonh/tap
 brew install --cask adonh/tap/mumu
 ```
 
-Grant **Accessibility** and **Screen Recording** in **System Settings → Privacy & Security**, then start using it immediately. There's no daemon, no background process, and no config file — `mumu` only ever does something when you run one of its commands.
+Grant **Accessibility** and **Screen Recording** in **System Settings → Privacy & Security**, then start using it immediately. There's no daemon and no background process — `mumu` only ever does something when you run one of its commands. It does keep an explicit, editable `config.yaml` (auto-created on first use) for settings like where your saved layouts are stored — see [Architecture Guide](docs/ARCHITECTURE.md), the [config/layout schema reference](docs/CONFIG_SCHEMA.md), and the [example config.yaml](docs/examples/).
 
 Other options (Nix flake, build from source) → [Installation Guide](docs/INSTALLATION.md)
 

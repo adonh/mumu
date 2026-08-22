@@ -245,8 +245,9 @@ rm -rf /Applications/Mumu.app
 # Remove CLI
 rm /usr/local/bin/mumu
 
-# Remove saved layouts
-rm -rf ~/.local/share/mumu
+# Remove saved layouts and settings
+rm -rf ~/Library/Application\ Support/mumu
+# (or $XDG_DATA_HOME/mumu and $XDG_CONFIG_HOME/mumu, if those are set)
 ```
 
 ### Nix

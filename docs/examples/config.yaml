@@ -1,0 +1,8 @@
+# mumu configuration.
+#
+# data_dir: the directory mumu uses to store its data (currently just
+# layouts/, the saved window-to-Space layouts, one internal JSON file per
+# display count). Supports a leading "~" for your home directory.
+# Defaults to $XDG_DATA_HOME/mumu if XDG_DATA_HOME is set, otherwise
+# ~/Library/Application Support/mumu.
+data_dir: ~/Library/Application Support/mumu

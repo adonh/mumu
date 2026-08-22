@@ -23,7 +23,7 @@ Report privately via [GitHub Security Advisories](https://github.com/adonh/mumu/
 
 ### Permissions
 
-mumu requires **macOS Accessibility** and **Screen Recording** permission to save and restore window-to-Space layouts (`mumu save`, `mumu restore`). With these granted, mumu can enumerate windows, read their titles, and move them between Spaces. It does not record, transmit, or log window content — window titles are only used in-memory for restore matching and are written to the local layout JSON file.
+mumu requires **macOS Accessibility** and **Screen Recording** permission to save and restore window-to-Space layouts (`mumu save`, `mumu restore`). With these granted, mumu can enumerate windows, read their titles, and move them between Spaces. It does not record, transmit, or log window content — window titles are only used in-memory for restore matching and are written to local JSON files under `data_dir/layouts/`.
 
 ### No Network Access
 

@@ -1,0 +1,24 @@
+## 1. Config package
+
+- [x] 1.1 Promote `go.yaml.in/yaml/v3` from indirect to direct in `go.mod`/`go.sum` (add an explicit import in the new config package) and verify `go build ./...` succeeds
+- [x] 1.2 Create `internal/config` package with a `Config` struct (`DataDir string`) and a path-resolution function implementing the `$XDG_CONFIG_HOME`-or-`~/Library/Application Support` rule from `specs/configuration/spec.md`, with a unit test covering both branches (env var set / unset)
+- [x] 1.3 Implement `Load() (*Config, error)`: read the config file if present and parse YAML; if absent, write it with the commented default template (resolving `data_dir`'s default via the `$XDG_DATA_HOME`-or-`~/Library/Application Support` rule) and return those defaults; verify with a unit test using a temp `HOME`/`XDG_CONFIG_HOME` covering: no file (auto-create + defaults returned), existing valid file (parsed as-is, not overwritten), malformed YAML (clear error naming the path), and invalid `data_dir` (empty/non-string) (clear error)
+- [x] 1.4 Expand `~` in `data_dir` via the existing `internal/paths.ExpandHome` and verify a unit test round-trips a `~`-prefixed value to an absolute path
+
+## 2. Saved-layout storage rewrite
+
+- [x] 2.1 Update `internal/layout/types.go`: add a `LayoutFile` (or similar) top-level struct with `SchemaVersion int` and `Layouts map[string]Layout`, dropping the now-redundant `DisplayCount` field from the per-entry struct used inside that map (keep `Layout` usable standalone where still needed, e.g. as the `Load`/`Save` return type) and verify `go vet ./internal/layout/...` passes
+- [x] 2.2 Rewrite `internal/layout/persist.go` to depend on `internal/config` for the data directory instead of the hardcoded `DefaultDir` constant, and read/write a single `layouts.yaml` (via `go.yaml.in/yaml/v3`) inside that directory instead of one JSON file per display count; verify with unit tests (using a temp data dir) for `Save` writing/overwriting an entry within the shared file, `Load` reading an existing entry and erroring clearly for a missing key, `Exists`, `Delete` removing only the targeted key, and `List` returning all keys
+- [x] 2.3 Add a unit test asserting a malformed `layouts.yaml` produces a clear error naming the file path and does not panic or silently return an empty layout
+- [x] 2.4 Remove the old `DefaultDir` constant and any remaining references to the per-display-count JSON path convention; verify with `go build ./...` and `rg` for leftover references
+
+## 3. Integration and docs
+
+- [x] 3.1 Run `mumu save`, `mumu list`, `mumu show`, `mumu restore`, and `mumu delete` end-to-end against a real session (or update/extend `internal/layout`'s existing higher-level tests) to verify the full save/restore flow works unchanged from a user's perspective against the new storage backend
+- [x] 3.2 Update `README.md` / `docs/CLI.md` (wherever the old `~/.local/share/mumu/layouts` path or JSON format is mentioned) to describe `config.yaml`, `data_dir`, and `layouts.yaml`, and verify with a repo-wide search that no doc references the old path or per-count JSON files
+- [x] 3.3 Add a `CHANGELOG.md`-appropriate note (or confirm release-please will surface it) marking the storage format and default location change as breaking, and verify the entry is present — confirmed `CHANGELOG.md` is release-please-generated (see `release-please-config.json`), not hand-edited; the eventual commit for this change must use a conventional-commit breaking-change marker (`!` + `BREAKING CHANGE:` footer) so release-please surfaces it, since no commit has been made yet
+
+## 4. Verification
+
+- [x] 4.1 Run `just test` and `just lint` and verify both pass with no new failures — `just test` passes fully; `just lint` was already failing on this branch before this change (67 pre-existing `exhaustruct_v5` issues, unrelated to this change: `.golangci.yml` disables `exhaustruct` but not the apparently-renamed `exhaustruct_v5`); this change adds 8 more instances of that same pre-existing, already-disabled-in-intent rule (consistent with existing test-file style elsewhere in the repo) and zero issues in any other lint category
+- [x] 4.2 Manually verify on macOS: delete any existing `~/.local/share/mumu/layouts` test data, run a fresh `mumu save`, confirm `config.yaml` and `layouts.yaml` are created under `~/Library/Application Support/mumu/` (or `$XDG_*` equivalents if set), and confirm editing `data_dir` in `config.yaml` moves subsequent reads/writes to the new location — verified against a real built binary with an isolated `$HOME`: `config.yaml` auto-created with the documented default, editing `data_dir` redirected `mumu list`/`show`/`delete` to a hand-edited `layouts.yaml` at the new location, and `delete` removed only the targeted entry (`mumu save`/`restore` themselves require Accessibility permission unavailable in this shell; the persistence layer they depend on is fully exercised by this test)

@@ -22,11 +22,12 @@ type Entry struct {
 	Ordinal int `json:"ordinal"`
 }
 
-// Layout is a saved window-to-space arrangement for a specific display count.
+// Layout is a saved window-to-space arrangement for a specific display count,
+// persisted as its own internal JSON file (see internal/layout/persist.go).
 type Layout struct {
 	SchemaVersion int `json:"schemaVersion"`
 	// DisplayCount is the number of connected displays this layout was
-	// captured for, and the key layouts are looked up by.
+	// captured for, and the file it's persisted as is named for.
 	DisplayCount int `json:"displayCount"`
 	// SpaceCounts is the per-display space-count sequence, left to right,
 	// recorded at save time. Used to detect arrangement drift at restore.
