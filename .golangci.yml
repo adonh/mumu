@@ -23,7 +23,7 @@ linters:
         - gomodguard
         - cyclop # duplicate of gocyclo
         - dupl # Too strict
-        - exhaustruct # Not relevant
+        - exhaustruct # Not relevant. NOTE: renamed to exhaustruct_v5 in golangci-lint > 2.12.2 (devbox.json's pinned version); update this entry when bumping golangci-lint past 2.12.2.
         - gochecknoglobals
         - gochecknoinits
         - gocognit # Too strict

@@ -152,6 +152,8 @@ vet:
     go vet ./...
     @echo "✓ Vet complete"
 
+full: fmt-check lint vet test-all
+
 # Download dependencies
 deps:
     @echo "Downloading dependencies..."
