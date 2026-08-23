@@ -189,7 +189,7 @@ Saved layouts SHALL contain only application identity, window title, and logical
 
 ### Requirement: Layout management commands
 
-`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout without applying it. `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
+`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout, without applying it, plus that display count's effective hook-command preview (see the `restore-hooks` capability). `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
 
 #### Scenario: Listing saved layouts
 
@@ -199,7 +199,7 @@ Saved layouts SHALL contain only application identity, window title, and logical
 #### Scenario: Previewing a saved layout
 
 - **WHEN** a user runs `mumu show` for a display count that has a saved layout
-- **THEN** the system displays that layout's window entries without moving any windows
+- **THEN** the system displays that layout's window entries and that display count's effective hook-command preview, without moving any windows or running any command
 
 #### Scenario: Deleting a saved layout
 
