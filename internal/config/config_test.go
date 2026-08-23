@@ -401,6 +401,235 @@ func TestLoad_DefaultFileDocumentsPinsAndPrecedence(t *testing.T) {
 	}
 }
 
+func TestLoad_ParsesGlobalAndPerDisplayCountHooks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"hooks:\n" +
+		"  off:\n" +
+		"    - echo global-off\n" +
+		"  on:\n" +
+		"    - [echo, global-on]\n" +
+		"  layouts:\n" +
+		"    2:\n" +
+		"      off:\n" +
+		"        - echo layout-2-off\n" +
+		"      on:\n" +
+		"        - echo layout-2-on\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(cfg.Hooks.Off) != 1 || cfg.Hooks.Off[0].Shell != "echo global-off" {
+		t.Fatalf("cfg.Hooks.Off = %+v, want [echo global-off]", cfg.Hooks.Off)
+	}
+
+	if len(cfg.Hooks.On) != 1 || len(cfg.Hooks.On[0].Argv) != 2 {
+		t.Fatalf("cfg.Hooks.On = %+v, want single argv command", cfg.Hooks.On)
+	}
+
+	layoutHooks, ok := cfg.LayoutHooks[2]
+	if !ok {
+		t.Fatalf("cfg.LayoutHooks = %+v, want entry for display count 2", cfg.LayoutHooks)
+	}
+
+	if len(layoutHooks.Off) != 1 || layoutHooks.Off[0].Shell != "echo layout-2-off" {
+		t.Fatalf("cfg.LayoutHooks[2].Off = %+v, want [echo layout-2-off]", layoutHooks.Off)
+	}
+
+	if len(layoutHooks.On) != 1 || layoutHooks.On[0].Shell != "echo layout-2-on" {
+		t.Fatalf("cfg.LayoutHooks[2].On = %+v, want [echo layout-2-on]", layoutHooks.On)
+	}
+}
+
+func TestLoad_HooksAbsentDefaultsToEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	err = os.WriteFile(path, []byte("data_dir: /custom/data\n"), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(cfg.Hooks.Off) != 0 || len(cfg.Hooks.On) != 0 {
+		t.Fatalf("cfg.Hooks = %+v, want empty", cfg.Hooks)
+	}
+
+	if len(cfg.LayoutHooks) != 0 {
+		t.Fatalf("cfg.LayoutHooks = %+v, want empty", cfg.LayoutHooks)
+	}
+}
+
+func TestLoad_InvalidHookEmptyStringCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"hooks:\n" +
+		"  off:\n" +
+		"    - \"\"\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for empty string hook command")
+	}
+
+	if cfg != nil {
+		t.Fatalf("Load() returned non-nil Config on error: %+v", cfg)
+	}
+}
+
+func TestLoad_InvalidHookEmptyListCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"hooks:\n" +
+		"  on:\n" +
+		"    - []\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for empty list hook command")
+	}
+}
+
+func TestLoad_InvalidHookListWithEmptyString(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"hooks:\n" +
+		"  layouts:\n" +
+		"    2:\n" +
+		"      off:\n" +
+		"        - [echo, \"\"]\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for hook command list containing empty string")
+	}
+}
+
+func TestLoad_InvalidHookNonListOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"hooks:\n" +
+		"  off: not-a-list\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for non-list hooks.off value")
+	}
+}
+
+func TestLoad_DefaultFileDocumentsHooks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+
+	_, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	data, err := os.ReadFile(config.FilePath())
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	content := string(data)
+	for _, want := range []string{"hooks:", "layouts:", "--no-hooks"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("default config file missing %q in content:\n%s", want, content)
+		}
+	}
+}
+
 func TestLoad_NonStringDataDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
