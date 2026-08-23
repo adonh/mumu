@@ -90,7 +90,7 @@ When the `window-pinning` capability's pin rules are configured to take preceden
 
 ### Requirement: Layout management commands
 
-`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout, plus that display count's configured pin rules (see the `window-pinning` capability), without applying either. `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
+`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout, plus that display count's configured pin rules (see the `window-pinning` capability) and effective hook-command preview (see the `restore-hooks` capability), without applying any of them. `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
 
 #### Scenario: Listing saved layouts
 
@@ -100,7 +100,7 @@ When the `window-pinning` capability's pin rules are configured to take preceden
 #### Scenario: Previewing a saved layout
 
 - **WHEN** a user runs `mumu show` for a display count that has a saved layout
-- **THEN** the system displays that layout's window entries and that display count's configured pin rules, without moving any windows
+- **THEN** the system displays that layout's window entries, that display count's configured pin rules, and that display count's effective hook-command preview, without moving any windows or running any command
 
 #### Scenario: Deleting a saved layout
 
