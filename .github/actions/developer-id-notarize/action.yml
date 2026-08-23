@@ -6,7 +6,7 @@ inputs:
     description: Path to the .app bundle to sign
     required: true
   developer-id-identity:
-    description: codesign identity, e.g. "Developer ID Application: Your Name (TEAM1234567)"
+    description: 'codesign identity, e.g. "Developer ID Application: Your Name (TEAM1234567)"'
     required: true
   mac-developer-id-cert:
     description: Base64-encoded Developer ID certificate (p12)

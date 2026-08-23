@@ -8,12 +8,12 @@ updates:
       interval: daily
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       actions:
         patterns:
           - '*'
-          
+
   - package-ecosystem: gomod
     directory: /
     target-branch: main
@@ -21,7 +21,7 @@ updates:
       interval: daily
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       actions:
         patterns:
@@ -34,7 +34,7 @@ updates:
       interval: daily
     open-pull-requests-limit: 5
     cooldown:
-      default-days: 3
+      default-days: 7
     groups:
       actions:
         patterns:
