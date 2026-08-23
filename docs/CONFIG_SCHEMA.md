@@ -11,6 +11,7 @@ mumu's own settings.
 | `data_dir`       | string                                             | yes      | `$XDG_DATA_HOME/mumu` if set, else `~/Library/Application Support/mumu` | Directory mumu's `layouts/` subdirectory lives in. A leading `~` is expanded to the home directory. Must be a non-empty string. |
 | `pins`           | map of display count (int) to list of [pin rule](#pin-rule-object) | no | none (no pins configured) | Fixed application-window-to-Space assignments `mumu restore` applies, keyed by the number of connected displays. Different display counts can declare entirely different pins. |
 | `pin_precedence` | string (`pin` or `layout`)                         | no       | `pin`                                                                | Whether pin rules (`pin`) or saved-layout entries (`layout`) win when both would claim the same open window during `mumu restore`. |
+| `hooks`          | [hooks object](#hooks-object)                      | no       | none (no hooks configured) | External commands run automatically around every `mumu restore`. See [Hooks object](#hooks-object). |
 
 ```yaml
 data_dir: ~/Library/Application Support/mumu
@@ -29,6 +30,16 @@ pins:
       space: 5
 
 pin_precedence: pin
+
+hooks:
+  off:
+    - osascript -e 'set volume output muted true'
+  on:
+    - [osascript, -e, "set volume output muted false"]
+  layouts:
+    2:
+      off:
+        - echo switching to 2-display layout
 ```
 
 ### Pin rule object
@@ -41,6 +52,25 @@ One entry under a `pins` display-count list.
 | `title`     | string | Approximate title pattern, matched the same way `mumu restore` matches saved-layout entries against open windows (shared-word similarity, not an exact match). Must be a non-empty string. |
 | `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
 
+### Hooks object
+
+`config.yaml`'s `hooks` setting.
+
+| Key       | Type                                                        | Required | Notes                                                                                          |
+| --------- | ------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------ |
+| `off`     | list of [command](#command)                                  | no       | Run before every `mumu restore` moves any window (see `layouts.<n>.off` for per-display-count commands run after this array). |
+| `on`      | list of [command](#command)                                  | no       | Run after every `mumu restore`'s window-move phase completes (see `layouts.<n>.on` for per-display-count commands run before this array). |
+| `layouts` | map of display count (int) to `{off, on}` command lists       | no       | Per-display-count `off`/`on` arrays, applied only when that number of displays is connected. Bracketing order for a given restore is: global `off`, that display count's `off`, **[windows restored]**, that display count's `on`, global `on`. |
+
+#### Command
+
+Each entry in an `off`/`on` list is either:
+
+- a single string, executed through a shell (`sh -c`), so it may use pipes, redirection, and shell expansion; or
+- a list of strings, executed directly as a program and its arguments, with no shell involved — the first element is the program, the rest are its arguments.
+
+Any of `hooks.off`, `hooks.on`, or a given display count's `layouts` entry may be absent or empty, independently of the others. A command's stdout/stderr stream directly to `mumu`'s own output as it runs; a command that exits non-zero or fails to start is reported and logged but does not stop the remaining commands in its array or abort the restore. Hooks only run as part of a `mumu restore` invocation that actually proceeds to its window-move phase — never for `mumu save`, and never on a schedule or system event. Pass `--no-hooks` to `mumu restore` to skip running any configured hooks for that one invocation.
+
 Loading rules:
 
 - If `config.yaml` doesn't exist yet, it's auto-created with commented defaults (see `defaultConfigYAML` in `internal/config/config.go`) and never overwritten afterward.
@@ -48,6 +78,8 @@ Loading rules:
 - A missing `pins` setting means no pins are configured for any display count; `mumu restore` proceeds using only its saved-layout matching.
 - Any pin rule missing `bundle_id` or `title`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A `pin_precedence` value other than `pin` or `layout` is a load error (`CodeInvalidConfig`).
+- A missing `hooks` setting means no hooks are configured, globally or for any display count; `mumu restore` runs no external commands.
+- Any command entry that's neither a non-empty string nor a non-empty list of non-empty strings, or an `off`/`on` value that isn't a list, is a load error (`CodeInvalidConfig`) naming the config file path and the offending entry.
 - Malformed YAML is a load error (`CodeInvalidConfig`).
 - Unrecognized top-level keys are ignored (forward-compatible), not rejected.
 - Any YAML mumu writes, including `config.yaml`, uses two-space indentation.

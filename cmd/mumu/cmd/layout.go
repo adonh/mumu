@@ -12,6 +12,7 @@ import (
 
 	"github.com/adonh/mumu/internal/config"
 	derrors "github.com/adonh/mumu/internal/errors"
+	"github.com/adonh/mumu/internal/hooks"
 	"github.com/adonh/mumu/internal/layout"
 	"github.com/adonh/mumu/internal/space"
 )
@@ -19,6 +20,7 @@ import (
 var (
 	restoreAssumeYes bool
 	deleteAssumeYes  bool
+	restoreNoHooks   bool
 
 	showSort       string
 	restoreSort    string
@@ -86,7 +88,11 @@ Spaces; entries whose saved Space no longer exists are skipped and reported.
 
 If the current per-display Space-count arrangement has changed since the
 layout was saved, you'll be asked to confirm before any windows are moved.
-Use --yes to skip the prompt.`,
+Use --yes to skip the prompt.
+
+If "hooks" are configured in config.yaml, their "off" commands run before
+any window is moved and their "on" commands run after the move phase
+completes; use --no-hooks to skip running them for this invocation.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		sortKey, err := layout.ParseSortKey(restoreSort)
 		if err != nil {
@@ -122,12 +128,20 @@ Use --yes to skip the prompt.`,
 			}
 		}
 
-		summary, err := layout.Restore(
-			saved,
-			cfg.Pins[displayCount],
-			cfg.PinPrecedence,
-			sortKey,
-			func(msg string) { cmd.Println(msg) },
+		summary, err := runRestoreWithHooks(
+			cmd,
+			cfg,
+			displayCount,
+			restoreNoHooks,
+			func() (layout.RestoreSummary, error) {
+				return layout.Restore(
+					saved,
+					cfg.Pins[displayCount],
+					cfg.PinPrecedence,
+					sortKey,
+					func(msg string) { cmd.Println(msg) },
+				)
+			},
 		)
 		if err != nil {
 			return err
@@ -137,6 +151,46 @@ Use --yes to skip the prompt.`,
 
 		return nil
 	},
+}
+
+// runRestoreWithHooks brackets restore (the window-move phase, performed
+// by calling restore) with the current display count's effective off/on
+// hook commands: the off array runs first, then restore, then — only if
+// restore succeeds — the on array. Hooks are skipped entirely when
+// noHooks is set. A failing off or on command is reported by hooks.Run
+// but never prevents restore from being called or changes its result.
+func runRestoreWithHooks(
+	cmd *cobra.Command,
+	cfg *config.Config,
+	displayCount int,
+	noHooks bool,
+	restore func() (layout.RestoreSummary, error),
+) (layout.RestoreSummary, error) {
+	var offCommands, onCommands []config.Command
+	if !noHooks {
+		offCommands, onCommands = resolveHooks(cfg, displayCount)
+	}
+
+	hooks.Run(
+		offCommands,
+		cmd.OutOrStdout(),
+		cmd.ErrOrStderr(),
+		func(msg string) { cmd.Println(msg) },
+	)
+
+	summary, err := restore()
+	if err != nil {
+		return summary, err
+	}
+
+	hooks.Run(
+		onCommands,
+		cmd.OutOrStdout(),
+		cmd.ErrOrStderr(),
+		func(msg string) { cmd.Println(msg) },
+	)
+
+	return summary, nil
 }
 
 var layoutLayoutCmd = &cobra.Command{
@@ -275,6 +329,9 @@ connected displays.`,
 
 		printConfiguredPins(cmd, cfg.Pins[displayCount])
 
+		offCommands, onCommands := resolveHooks(cfg, displayCount)
+		printConfiguredHooks(cmd, offCommands, onCommands)
+
 		return nil
 	},
 }
@@ -317,6 +374,25 @@ the prompt.`,
 
 		return nil
 	},
+}
+
+// resolveHooks computes the effective, ordered off/on command arrays for a
+// given display count: the global off array followed by that display
+// count's off array, and that display count's on array followed by the
+// global on array. Both mumu restore (to execute) and mumu show (to
+// preview) call this so they can never disagree on order.
+func resolveHooks(cfg *config.Config, displayCount int) ([]config.Command, []config.Command) {
+	layoutHooks := cfg.LayoutHooks[displayCount]
+
+	offCommands := make([]config.Command, 0, len(cfg.Hooks.Off)+len(layoutHooks.Off))
+	offCommands = append(offCommands, cfg.Hooks.Off...)
+	offCommands = append(offCommands, layoutHooks.Off...)
+
+	onCommands := make([]config.Command, 0, len(layoutHooks.On)+len(cfg.Hooks.On))
+	onCommands = append(onCommands, layoutHooks.On...)
+	onCommands = append(onCommands, cfg.Hooks.On...)
+
+	return offCommands, onCommands
 }
 
 func currentDisplayCount() (int, error) {
@@ -388,6 +464,35 @@ func printConfiguredPins(cmd *cobra.Command, pins []config.PinRule) {
 			pin.BundleID,
 			displayTitle(pin.Title),
 		)
+	}
+}
+
+// printConfiguredHooks prints the effective, ordered off/on hook-command
+// arrays for a display count — as computed by resolveHooks and shown
+// exactly as configured — without executing anything. Prints nothing
+// when neither array has any commands, leaving the rest of "mumu show"'s
+// output unaffected.
+func printConfiguredHooks(cmd *cobra.Command, offCommands, onCommands []config.Command) {
+	if len(offCommands) == 0 && len(onCommands) == 0 {
+		return
+	}
+
+	cmd.Println("Configured hooks:")
+
+	if len(offCommands) > 0 {
+		cmd.Println("  off:")
+
+		for _, command := range offCommands {
+			cmd.Printf("    - %s\n", hooks.Describe(command))
+		}
+	}
+
+	if len(onCommands) > 0 {
+		cmd.Println("  on:")
+
+		for _, command := range onCommands {
+			cmd.Printf("    - %s\n", hooks.Describe(command))
+		}
 	}
 }
 
@@ -463,6 +568,8 @@ func addSortFlag(cmd *cobra.Command, dest *string) {
 func init() {
 	layoutRestoreCmd.Flags().
 		BoolVarP(&restoreAssumeYes, "yes", "y", false, "Skip the arrangement-mismatch confirmation prompt")
+	layoutRestoreCmd.Flags().
+		BoolVar(&restoreNoHooks, "no-hooks", false, "Skip running any configured hook commands for this restore")
 	layoutDeleteCmd.Flags().
 		BoolVarP(&deleteAssumeYes, "yes", "y", false, "Skip the delete confirmation prompt")
 

@@ -10,8 +10,9 @@
 - [Space Numbering](#space-numbering)
 - [Output Ordering (`--sort`)](#output-ordering---sort)
 - [Pinned Windows](#pinned-windows)
+- [Restore Hooks](#restore-hooks)
 - [`mumu save`](#mumu-save)
-- [`mumu restore`](#mumu-restore---yes---sort-displaymacosapp)
+- [`mumu restore`](#mumu-restore---yes---no-hooks---sort-displaymacosapp)
 - [`mumu list`](#mumu-list)
 - [`mumu show`](#mumu-show-display-count---sort-displaymacosapp)
 - [`mumu delete`](#mumu-delete-display-count---yes)
@@ -53,6 +54,16 @@ Pins only take effect as part of `mumu restore` — there's no separate command 
 
 `mumu show` also lists a display count's configured pins (as written, without matching them against any open window) alongside its saved layout.
 
+## Restore Hooks
+
+`config.yaml`'s `hooks` setting lets you configure external commands to run automatically around every `mumu restore` — e.g. muting audio before windows move and unmuting it after, or notifying another tool that the arrangement changed. See [Configuration Schema — Hooks object](CONFIG_SCHEMA.md#hooks-object) for the full field reference.
+
+Commands are split into an `off` array (run first, before any window moves) and an `on` array (run last, after the move phase completes), configurable both globally and per connected-display-count. For a given restore, the run order brackets the global arrays outermost: global `off` → that display count's `off` → **[windows restored]** → that display count's `on` → global `on`. Within an array, commands run one at a time, in the order listed. Each command may be written as a single shell string (run via `sh -c`) or as an explicit list of strings (run directly, no shell); its output streams live as part of `mumu restore`'s own output. A command that exits non-zero or fails to start is reported and logged, but doesn't stop the remaining commands in its array or abort the restore's window-move phase.
+
+Hooks only run when `mumu restore` actually proceeds to (or past) its window-move phase — not when it reports no saved layout for the current display count, and not when you decline the arrangement-drift confirmation prompt. They have no effect on `mumu save`, and are never triggered automatically on a schedule, at login, or in response to any system event. Pass `--no-hooks` to skip running any configured hooks for one restore, without changing `config.yaml`.
+
+`mumu show` also lists a display count's effective, ordered `off`/`on` hook commands (as configured, without executing them) alongside its saved layout and pins.
+
 ---
 
 ## `mumu save`
@@ -63,7 +74,7 @@ Captures, for every non-fullscreen window on every Space across all connected di
 mumu save
 ```
 
-## `mumu restore [--yes] [--sort display|macos|app]`
+## `mumu restore [--yes] [--no-hooks] [--sort display|macos|app]`
 
 Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). For each app, its saved entries and currently open windows are matched as a single batch: every remaining entry is scored against every remaining window by title similarity (shared words, ignoring case and word order), and the closest-matching pairs are assigned first, so no open window is ever claimed by more than one saved entry — this matters for apps like browsers, whose titles rarely match exactly across save and restore. An entry goes unmatched only once its app has no open window left to claim. Ties are broken by the entry's saved position, then deterministically, rather than left unresolved. After matching, remaining open windows from an app with a valid assignment move to that app's most prevalent target Space. If its target Spaces are tied, they move to the Space currently shown on the primary (menu-bar) display, so they are immediately visible; apps with no valid assignment are left unchanged. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
 
@@ -71,9 +82,12 @@ If the current per-display Space-count arrangement doesn't match what was record
 
 Also applies any pins configured for the current display count (see [Pinned Windows](#pinned-windows)) — matched the same way, and moved/skipped/reported alongside saved-layout entries in the output below.
 
+If hooks are configured (see [Restore Hooks](#restore-hooks)), their `off` commands run before any window moves and their `on` commands run after the move phase completes. Pass `--no-hooks` to skip running any configured hooks for this invocation.
+
 ```bash
 mumu restore
 mumu restore --yes
+mumu restore --no-hooks
 mumu restore --sort macos
 ```
 
@@ -89,7 +103,7 @@ mumu list
 
 ## `mumu show [display-count] [--sort display|macos|app]`
 
-Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order). Also lists that display count's configured pins (see [Pinned Windows](#pinned-windows)) as written in `config.yaml`, without matching them against any currently open window.
+Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order). Also lists that display count's configured pins (see [Pinned Windows](#pinned-windows)) and effective, ordered hook commands (see [Restore Hooks](#restore-hooks)) as written in `config.yaml`, without matching them against any currently open window or executing anything.
 
 ```bash
 mumu show

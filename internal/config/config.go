@@ -1,8 +1,10 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"go.yaml.in/yaml/v3"
 
@@ -35,6 +37,84 @@ type PinRule struct {
 	Space int
 }
 
+// Errors returned by Command.UnmarshalYAML for invalid hook command
+// entries.
+var (
+	ErrCommandEmptyString        = errors.New("command must be a non-empty string")
+	ErrCommandEmptyList          = errors.New("command must be a non-empty list of strings")
+	ErrCommandListHasEmptyString = errors.New("command list must not contain empty strings")
+	ErrCommandUnsupportedKind    = errors.New("command must be a string or a list of strings")
+)
+
+// Command is a single user-configured external command, written in
+// config.yaml as either a plain string (executed through a shell) or a
+// list of strings (executed directly, with no shell involved). Exactly
+// one of Shell or Argv is populated.
+type Command struct {
+	// Shell holds the command when written as a single string, run via
+	// "sh -c".
+	Shell string
+	// Argv holds the command when written as a list of strings: the
+	// first element is the program, the rest are its arguments.
+	Argv []string
+}
+
+// UnmarshalYAML decodes a scalar YAML node into Shell and a sequence node
+// into Argv, rejecting empty strings, empty lists, and any other node
+// kind (e.g. a mapping).
+func (c *Command) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		var value string
+
+		err := node.Decode(&value)
+		if err != nil {
+			return err
+		}
+
+		if value == "" {
+			return ErrCommandEmptyString
+		}
+
+		*c = Command{Shell: value}
+
+		return nil
+	case yaml.SequenceNode:
+		var argv []string
+
+		err := node.Decode(&argv)
+		if err != nil {
+			return err
+		}
+
+		if len(argv) == 0 {
+			return ErrCommandEmptyList
+		}
+
+		if slices.Contains(argv, "") {
+			return ErrCommandListHasEmptyString
+		}
+
+		*c = Command{Argv: argv}
+
+		return nil
+	case yaml.DocumentNode, yaml.MappingNode, yaml.AliasNode:
+		return ErrCommandUnsupportedKind
+	default:
+		return ErrCommandUnsupportedKind
+	}
+}
+
+// Hooks holds an "off" command array and an "on" command array, either
+// applied globally or scoped to a specific connected-display-count (see
+// LayoutHooks).
+type Hooks struct {
+	// Off commands run before mumu restore moves any window.
+	Off []Command
+	// On commands run after mumu restore's window-move phase completes.
+	On []Command
+}
+
 // Config holds mumu's user-editable settings, loaded from its config.yaml.
 type Config struct {
 	// DataDir is the directory mumu uses to store its data (currently
@@ -48,6 +128,13 @@ type Config struct {
 	// PinPrecedence controls pin-vs-saved-layout precedence during
 	// restore. Defaults to PinPrecedencePin.
 	PinPrecedence PinPrecedence
+	// Hooks holds the global off/on command arrays run around every
+	// mumu restore, regardless of display count.
+	Hooks Hooks
+	// LayoutHooks maps a connected-display-count to the off/on command
+	// arrays configured for it. A display count with no configured
+	// hooks has no entry.
+	LayoutHooks map[int]Hooks
 }
 
 const (
@@ -70,6 +157,20 @@ type pinRuleFileFormat struct {
 	Space    int    `yaml:"space"`
 }
 
+// hooksLayoutFileFormat is the on-disk shape of one entry under a
+// config.yaml "hooks.layouts" display-count map.
+type hooksLayoutFileFormat struct {
+	Off []Command `yaml:"off"`
+	On  []Command `yaml:"on"`
+}
+
+// hooksFileFormat is the on-disk shape of config.yaml's "hooks" setting.
+type hooksFileFormat struct {
+	Off     []Command                     `yaml:"off"`
+	On      []Command                     `yaml:"on"`
+	Layouts map[int]hooksLayoutFileFormat `yaml:"layouts"`
+}
+
 // fileFormat is the on-disk shape of config.yaml.
 type fileFormat struct {
 	DataDir string `yaml:"data_dir"` //nolint:tagliatelle // Stable user-facing config key name.
@@ -78,6 +179,8 @@ type fileFormat struct {
 	Pins map[int][]pinRuleFileFormat `yaml:"pins"`
 	// PinPrecedence is "pin" or "layout"; empty means the default ("pin").
 	PinPrecedence string `yaml:"pin_precedence"` //nolint:tagliatelle // Stable user-facing config key name.
+	// Hooks is the global and per-display-count off/on command arrays.
+	Hooks hooksFileFormat `yaml:"hooks"`
 }
 
 // FilePath resolves the path to mumu's configuration file: it follows
@@ -147,10 +250,14 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	hooks, layoutHooks := convertHooks(parsed.Hooks)
+
 	return &Config{
 		DataDir:       paths.ExpandHome(parsed.DataDir),
 		Pins:          pins,
 		PinPrecedence: precedence,
+		Hooks:         hooks,
+		LayoutHooks:   layoutHooks,
 	}, nil
 }
 
@@ -230,6 +337,27 @@ func validatePinPrecedence(path, raw string) (PinPrecedence, error) {
 	}
 }
 
+// convertHooks converts the on-disk hooks shape into the global Hooks and
+// per-display-count LayoutHooks used by Config. Every Command entry has
+// already been validated as a non-empty string or non-empty list of
+// non-empty strings by Command.UnmarshalYAML during parsing (and a
+// non-list off/on value already fails parsing with a clear YAML type
+// error), so this only performs the shape conversion.
+func convertHooks(raw hooksFileFormat) (Hooks, map[int]Hooks) {
+	global := Hooks{Off: raw.Off, On: raw.On}
+
+	if len(raw.Layouts) == 0 {
+		return global, map[int]Hooks{}
+	}
+
+	layoutHooks := make(map[int]Hooks, len(raw.Layouts))
+	for displayCount, hooks := range raw.Layouts {
+		layoutHooks[displayCount] = Hooks(hooks)
+	}
+
+	return global, layoutHooks
+}
+
 func createDefault(path string) (*Config, error) {
 	dataDirRaw := defaultDataDirRaw()
 
@@ -273,5 +401,27 @@ func defaultConfigYAML(dataDir string) string {
 		"# (\"layout\") wins when both would claim the same open window during\n" +
 		"# \"mumu restore\".\n" +
 		"#\n" +
-		"# pin_precedence: pin\n"
+		"# pin_precedence: pin\n" +
+		"\n" +
+		"# hooks: external commands run automatically around every \"mumu restore\".\n" +
+		"# \"off\" commands run first, before any window is moved; \"on\" commands run\n" +
+		"# last, after the restore's move phase completes. Global off/on arrays\n" +
+		"# apply to every restore; a \"layouts\" entry's off/on arrays apply only\n" +
+		"# when that many displays are connected, and run inside the global\n" +
+		"# arrays (global off, then layout off, then the restore, then layout on,\n" +
+		"# then global on). Each command may be a single string (run via \"sh -c\",\n" +
+		"# so it may use pipes and shell expansion) or a list of strings (run\n" +
+		"# directly as a program and its arguments, no shell). Absent or empty\n" +
+		"# means no hooks. Skip hooks for one restore with \"mumu restore\n" +
+		"# --no-hooks\".\n" +
+		"#\n" +
+		"# hooks:\n" +
+		"#   off:\n" +
+		"#     - osascript -e 'set volume output muted true'\n" +
+		"#   on:\n" +
+		"#     - [osascript, -e, \"set volume output muted false\"]\n" +
+		"#   layouts:\n" +
+		"#     2:\n" +
+		"#       off:\n" +
+		"#         - echo switching to 2-display layout\n"
 }
