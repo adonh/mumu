@@ -21,21 +21,21 @@ pins:
   2:
     - bundle_id: com.tinyspeck.slackmacgap
       title: "general"
-      space: 1
+      ordinal: 1
   4:
     - bundle_id: com.tinyspeck.slackmacgap
       title: "general"
-      space: 1
+      ordinal: 1
     - bundle_id: com.google.Chrome
       title: "GitHub"
-      space: 5
+      ordinal: 5
 
 pin_precedence: pin
 
 default_spaces:
   2:
     - bundle_id: com.tinyspeck.slackmacgap
-      space: 1
+      ordinal: 1
 
 hooks:
   off:
@@ -56,7 +56,7 @@ One entry under a `pins` display-count list.
 | ----------- | ------ | ------------------------------------------------------------------------------------------------ |
 | `bundle_id` | string | The pinned application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
 | `title`     | string | Approximate title pattern, matched the same way `mumu restore` matches saved-layout entries against open windows (shared-word similarity, not an exact match). Must be a non-empty string. |
-| `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
+| `ordinal`   | int    | Target Space's logical left-to-right ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
 
 ### Default-space rule object
 
@@ -65,7 +65,7 @@ One entry under a `default_spaces` display-count list.
 | Key         | Type   | Notes                                                                                          |
 | ----------- | ------ | ------------------------------------------------------------------------------------------------ |
 | `bundle_id` | string | The application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
-| `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)) for that application's leftover unclaimed windows. Must be a positive integer. |
+| `ordinal`   | int    | Target Space's logical left-to-right ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)) — for that application's leftover unclaimed windows. Must be a positive integer. |
 
 Unlike a [pin rule](#pin-rule-object), there's no `title`: a default-space rule is application-level, not per-window. When configured for an application at the current display count, it always wins over the usual "most prevalent assigned Space" fallback for that application's leftover windows — even when that heuristic would otherwise produce an unambiguous (non-tied) target — and it also activates a fallback placement for an application with zero valid saved-entry matches this restore, a case that otherwise receives no fallback at all. See `mumu restore --help` and the `space-layout` capability spec for the full precedence order.
 
@@ -93,10 +93,10 @@ Loading rules:
 - If `config.yaml` doesn't exist yet, it's auto-created with commented defaults (see `defaultConfigYAML` in `internal/config/config.go`) and never overwritten afterward.
 - Missing/empty `data_dir`, or a `data_dir` value that isn't a plain string, is a load error (`CodeInvalidConfig`) — the process exits rather than silently falling back to a default.
 - A missing `pins` setting means no pins are configured for any display count; `mumu restore` proceeds using only its saved-layout matching.
-- Any pin rule missing `bundle_id` or `title`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
+- Any pin rule missing `bundle_id` or `title`, or with an `ordinal` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A `pin_precedence` value other than `pin` or `layout` is a load error (`CodeInvalidConfig`).
 - A missing `default_spaces` setting means no application has a configured default Space for any display count; `mumu restore` proceeds using only its prevalent-Space fallback heuristic.
-- Any default-space rule missing `bundle_id`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
+- Any default-space rule missing `bundle_id`, or with an `ordinal` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A missing `hooks` setting means no hooks are configured, globally or for any display count; `mumu restore` runs no external commands.
 - Any command entry that's neither a non-empty string nor a non-empty list of non-empty strings, or an `off`/`on` value that isn't a list, is a load error (`CodeInvalidConfig`) naming the config file path and the offending entry.
 - Malformed YAML is a load error (`CodeInvalidConfig`).
@@ -126,7 +126,7 @@ One saved window.
 | `bundleId` | string | The owning application's bundle identifier (e.g. `com.google.Chrome`).                                                                     |
 | `title`    | string | The window's title at save time. Primary signal for restore matching.                                                                     |
 | `index`    | int    | 0-based position among the app's other captured (non-fullscreen) windows, in save-time enumeration order. Restore-time fallback when title matching is ambiguous. |
-| `ordinal`  | int    | The window's logical left-to-right Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)), independent of which display is primary. |
+| `ordinal`  | int    | The window's logical left-to-right Space number — mumu's own numbering (see [CLI Guide — Space Numbering](CLI.md#space-numbering)), not the macOS Mission Control Space number — independent of which display is primary. |
 
 ```json
 {

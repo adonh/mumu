@@ -13,9 +13,9 @@
 - [Default Spaces](#default-spaces)
 - [Restore Hooks](#restore-hooks)
 - [`mumu save`](#mumu-save)
-- [`mumu restore`](#mumu-restore---yes---no-hooks---sort-displaymacosapp)
+- [`mumu restore`](#mumu-restore---yes---no-hooks---sort-logicalmacosapp)
 - [`mumu list`](#mumu-list)
-- [`mumu show`](#mumu-show-display-count---sort-displaymacosapp)
+- [`mumu show`](#mumu-show-display-count---sort-logicalmacosapp)
 - [`mumu delete`](#mumu-delete-display-count---yes)
 - [`mumu status`](#mumu-status)
 - [Limitations](#limitations)
@@ -39,9 +39,9 @@ Because this can diverge from macOS's own Mission Control ordering whenever the 
 
 ## Output ordering (`--sort`)
 
-`mumu show` and `mumu restore` both accept `--sort <display|macos|app>`, controlling the order per-window entries print in (and, for `restore`, the order windows are actually moved in — it has no effect on _which_ windows get matched, moved, or skipped):
+`mumu show` and `mumu restore` both accept `--sort <logical|macos|app>`, controlling the order per-window entries print in (and, for `restore`, the order windows are actually moved in — it has no effect on _which_ windows get matched, moved, or skipped):
 
-- `display` (default): logical left-to-right Space number, ascending.
+- `logical` (default): mumu's own logical left-to-right Space number, ascending.
 - `macos`: macOS Mission Control Space number, ascending.
 - `app`: bundle identifier, ascending (alphabetical), grouping all of one application's windows together. mumu has no captured or resolvable human-readable app display name, so this sorts by the raw bundle ID string (e.g. `com.apple.Safari`), not a "friendly" app name.
 
@@ -83,7 +83,7 @@ Captures, for every non-fullscreen window on every Space across all connected di
 mumu save
 ```
 
-## `mumu restore [--yes] [--no-hooks] [--sort display|macos|app]`
+## `mumu restore [--yes] [--no-hooks] [--sort logical|macos|app]`
 
 Auto-detects the current display count, loads the layout saved for it, and moves each matching, already-running application's window back to its recorded Space. Applications that aren't running are skipped (never launched). For each app, its saved entries and currently open windows are matched as a single batch: every remaining entry is scored against every remaining window by title similarity (shared words, ignoring case and word order), and the closest-matching pairs are assigned first, so no open window is ever claimed by more than one saved entry — this matters for apps like browsers, whose titles rarely match exactly across save and restore. An entry goes unmatched only once its app has no open window left to claim. Ties are broken by the entry's saved position, then deterministically, rather than left unresolved. After matching, remaining open windows from an app go, in order of precedence: (1) to that app's [configured default Space](#default-spaces), if one is set for the current display count — always, regardless of any matched assignment; (2) otherwise, if the app has at least one valid saved-entry assignment this restore, to its most prevalent target Space, or the Space currently shown on the primary (menu-bar) display if its target Spaces are tied; (3) otherwise, left unchanged. Never creates or removes Spaces — entries whose target Space no longer exists are skipped and reported.
 
@@ -100,7 +100,7 @@ mumu restore --no-hooks
 mumu restore --sort macos
 ```
 
-Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (target Space — both numbers, see [Space Numbering](#space-numbering) — then bundle ID and title) so it's never a silent pause. Fallback placements are marked `(fallback)` — or `(default)` instead, when a [configured default Space](#default-spaces) is what placed them — and approximate (non-exact) title matches are marked `(fuzzy)` in progress output and failure summaries. A placement is never marked both `(default)` and `(fallback)`, and never both a fallback marker and `(fuzzy)`, since they come from different steps. Windows are moved, and progress lines printed, in the order set by `--sort` (default: display-sequence order). Afterward, any skipped entries are listed grouped by reason — each group also ordered by `--sort` — each showing the bundle ID, title, and saved Space, including the specific windows that couldn't be matched to a currently open window.
+Since each window move is deliberately paced to let WindowServer catch up, restoring many windows can take a few seconds; restore prints a line for each window as it's moved (target Space — both numbers, see [Space Numbering](#space-numbering) — then bundle ID and title) so it's never a silent pause. Fallback placements are marked `(fallback)` — or `(default)` instead, when a [configured default Space](#default-spaces) is what placed them — and approximate (non-exact) title matches are marked `(fuzzy)` in progress output and failure summaries. A placement is never marked both `(default)` and `(fallback)`, and never both a fallback marker and `(fuzzy)`, since they come from different steps. Windows are moved, and progress lines printed, in the order set by `--sort` (default: logical Space sequence). Afterward, any skipped entries are listed grouped by reason — each group also ordered by `--sort` — each showing the bundle ID, title, and saved Space, including the specific windows that couldn't be matched to a currently open window.
 
 ## `mumu list`
 
@@ -110,9 +110,9 @@ Lists every saved layout with its display count, window count, and save timestam
 mumu list
 ```
 
-## `mumu show [display-count] [--sort display|macos|app]`
+## `mumu show [display-count] [--sort logical|macos|app]`
 
-Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: display-sequence order). Also lists that display count's configured pins (see [Pinned Windows](#pinned-windows)), configured default spaces (see [Default Spaces](#default-spaces)), and effective, ordered hook commands (see [Restore Hooks](#restore-hooks)) as written in `config.yaml`, without matching them against any currently open window or executing anything.
+Prints a saved layout's window entries (Space number — both numbers, see [Space Numbering](#space-numbering) — bundle ID, title) without moving anything. Defaults to the layout for the current display count. Entry order follows `--sort` (default: logical Space sequence). Also lists that display count's configured pins (see [Pinned Windows](#pinned-windows)), configured default spaces (see [Default Spaces](#default-spaces)), and effective, ordered hook commands (see [Restore Hooks](#restore-hooks)) as written in `config.yaml`, without matching them against any currently open window or executing anything.
 
 ```bash
 mumu show

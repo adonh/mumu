@@ -21,7 +21,7 @@ func pinEntriesByBundle(pins []config.PinRule) map[string][]Entry {
 			BundleID: pin.BundleID,
 			Title:    pin.Title,
 			Index:    -1,
-			Ordinal:  pin.Space,
+			Ordinal:  pin.Ordinal,
 		})
 	}
 
@@ -39,7 +39,7 @@ func defaultSpacesByBundle(rules []config.DefaultSpaceRule) map[string]int {
 	byBundle := make(map[string]int, len(rules))
 
 	for _, rule := range rules {
-		byBundle[rule.BundleID] = rule.Space
+		byBundle[rule.BundleID] = rule.Ordinal
 	}
 
 	return byBundle
