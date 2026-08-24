@@ -37,6 +37,18 @@ type PinRule struct {
 	Space int
 }
 
+// DefaultSpaceRule is a single user-configured application-level fallback
+// target: when mumu restore has leftover unclaimed windows for this
+// application, they go to Space unconditionally, taking precedence over
+// the prevalent-Space heuristic (see the space-layout capability).
+type DefaultSpaceRule struct {
+	// BundleID is the application's bundle identifier.
+	BundleID string
+	// Space is the target logical left-to-right Space ordinal (see
+	// internal/space's logical numbering).
+	Space int
+}
+
 // Errors returned by Command.UnmarshalYAML for invalid hook command
 // entries.
 var (
@@ -128,6 +140,10 @@ type Config struct {
 	// PinPrecedence controls pin-vs-saved-layout precedence during
 	// restore. Defaults to PinPrecedencePin.
 	PinPrecedence PinPrecedence
+	// DefaultSpaces maps a connected-display-count to the application-level
+	// fallback-space rules configured for it. A display count with no
+	// configured default spaces has no entry.
+	DefaultSpaces map[int][]DefaultSpaceRule
 	// Hooks holds the global off/on command arrays run around every
 	// mumu restore, regardless of display count.
 	Hooks Hooks
@@ -157,6 +173,13 @@ type pinRuleFileFormat struct {
 	Space    int    `yaml:"space"`
 }
 
+// defaultSpaceRuleFileFormat is the on-disk shape of one entry under a
+// config.yaml "default_spaces" display-count list.
+type defaultSpaceRuleFileFormat struct {
+	BundleID string `yaml:"bundle_id"` //nolint:tagliatelle // Stable user-facing config key name.
+	Space    int    `yaml:"space"`
+}
+
 // hooksLayoutFileFormat is the on-disk shape of one entry under a
 // config.yaml "hooks.layouts" display-count map.
 type hooksLayoutFileFormat struct {
@@ -179,6 +202,10 @@ type fileFormat struct {
 	Pins map[int][]pinRuleFileFormat `yaml:"pins"`
 	// PinPrecedence is "pin" or "layout"; empty means the default ("pin").
 	PinPrecedence string `yaml:"pin_precedence"` //nolint:tagliatelle // Stable user-facing config key name.
+	// DefaultSpaces maps a display count to its list of application-level
+	// default-space rules. Absent or empty means no default spaces are
+	// configured for that display count.
+	DefaultSpaces map[int][]defaultSpaceRuleFileFormat `yaml:"default_spaces"` //nolint:tagliatelle // Stable user-facing config key name.
 	// Hooks is the global and per-display-count off/on command arrays.
 	Hooks hooksFileFormat `yaml:"hooks"`
 }
@@ -250,12 +277,18 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	defaultSpaces, err := validateDefaultSpaces(path, parsed.DefaultSpaces)
+	if err != nil {
+		return nil, err
+	}
+
 	hooks, layoutHooks := convertHooks(parsed.Hooks)
 
 	return &Config{
 		DataDir:       paths.ExpandHome(parsed.DataDir),
 		Pins:          pins,
 		PinPrecedence: precedence,
+		DefaultSpaces: defaultSpaces,
 		Hooks:         hooks,
 		LayoutHooks:   layoutHooks,
 	}, nil
@@ -337,6 +370,52 @@ func validatePinPrecedence(path, raw string) (PinPrecedence, error) {
 	}
 }
 
+// validateDefaultSpaces checks every configured default-space rule has a
+// non-empty bundle_id and a positive space ordinal, returning a clear
+// error naming the config file path and the offending entry otherwise.
+func validateDefaultSpaces(
+	path string,
+	raw map[int][]defaultSpaceRuleFileFormat,
+) (map[int][]DefaultSpaceRule, error) {
+	if len(raw) == 0 {
+		return map[int][]DefaultSpaceRule{}, nil
+	}
+
+	defaultSpaces := make(map[int][]DefaultSpaceRule, len(raw))
+
+	for displayCount, rules := range raw {
+		converted := make([]DefaultSpaceRule, 0, len(rules))
+
+		for _, rule := range rules {
+			if rule.BundleID == "" {
+				return nil, derrors.Newf(
+					derrors.CodeInvalidConfig,
+					"config file %s: default_spaces for %d display(s): bundle_id must be a non-empty string",
+					path,
+					displayCount,
+				)
+			}
+
+			if rule.Space <= 0 {
+				return nil, derrors.Newf(
+					derrors.CodeInvalidConfig,
+					"config file %s: default_spaces for %d display(s), app %s: space must be a positive integer, got %d",
+					path,
+					displayCount,
+					rule.BundleID,
+					rule.Space,
+				)
+			}
+
+			converted = append(converted, DefaultSpaceRule(rule))
+		}
+
+		defaultSpaces[displayCount] = converted
+	}
+
+	return defaultSpaces, nil
+}
+
 // convertHooks converts the on-disk hooks shape into the global Hooks and
 // per-display-count LayoutHooks used by Config. Every Command entry has
 // already been validated as a non-empty string or non-empty list of
@@ -402,6 +481,20 @@ func defaultConfigYAML(dataDir string) string {
 		"# \"mumu restore\".\n" +
 		"#\n" +
 		"# pin_precedence: pin\n" +
+		"\n" +
+		"# default_spaces: fixed application-level fallback Spaces, applied by\n" +
+		"# \"mumu restore\" to any of an app's currently open windows left over\n" +
+		"# after title matching (and pins), keyed by the number of connected\n" +
+		"# displays. Unlike pins, there's no title pattern — this always wins\n" +
+		"# over the usual \"most prevalent assigned Space\" fallback heuristic for\n" +
+		"# that app, and also applies even when the app has no saved-layout\n" +
+		"# assignment at all this restore. Absent or empty means no configured\n" +
+		"# defaults (the usual heuristic still applies).\n" +
+		"#\n" +
+		"# default_spaces:\n" +
+		"#   2:\n" +
+		"#     - bundle_id: com.tinyspeck.slackmacgap\n" +
+		"#       space: 1\n" +
 		"\n" +
 		"# hooks: external commands run automatically around every \"mumu restore\".\n" +
 		"# \"off\" commands run first, before any window is moved; \"on\" commands run\n" +

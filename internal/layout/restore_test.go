@@ -231,6 +231,7 @@ func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
 		liveByBundle,
 		usedIndex,
 		validOrdinals,
+		map[string]int{},
 		func() (fallbackTarget, error) { return fallbackTarget{}, nil },
 		func(ordinal int) uint64 { return uint64(ordinal) },
 	)
@@ -247,6 +248,37 @@ func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
 
 	if len(fallbackMoves) != 1 || fallbackMoves[0].fuzzy {
 		t.Fatalf("fallbackMoves = %#v, want one non-fuzzy fallback", fallbackMoves)
+	}
+}
+
+func TestMoveMarker_DistinguishesDefaultConfiguredFromPrevalentFallback(t *testing.T) {
+	t.Parallel()
+
+	defaultTarget := moveTarget{fallback: true, defaultConfigured: true}
+	if got := moveMarker(defaultTarget); got != " (default)" {
+		t.Fatalf("moveMarker(configured default) = %q, want %q", got, " (default)")
+	}
+
+	prevalentTarget := moveTarget{fallback: true}
+	if got := moveMarker(prevalentTarget); got != " (fallback)" {
+		t.Fatalf("moveMarker(prevalent fallback) = %q, want %q", got, " (fallback)")
+	}
+
+	if got := moveMarker(defaultTarget); got == moveMarker(prevalentTarget) {
+		t.Fatalf(
+			"moveMarker() text does not differ between configured-default and prevalent fallback: %q",
+			got,
+		)
+	}
+
+	fuzzyDirect := moveTarget{fuzzy: true}
+	if got := moveMarker(fuzzyDirect); got != " (fuzzy)" {
+		t.Fatalf("moveMarker(fuzzy direct match) = %q, want %q", got, " (fuzzy)")
+	}
+
+	plain := moveTarget{}
+	if got := moveMarker(plain); got != "" {
+		t.Fatalf("moveMarker(plain direct match) = %q, want empty", got)
 	}
 }
 

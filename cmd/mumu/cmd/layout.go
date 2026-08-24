@@ -81,10 +81,13 @@ window is ever claimed by more than one saved entry; an entry goes
 unmatched only once its app has no open window left to claim. Matches
 that aren't exact are marked "(fuzzy)" in output (this matters for apps
 like browsers, whose titles rarely match exactly). Other open windows of
-an app are placed in its most prevalent matched Space; tied targets use
-the Space currently shown on the primary (menu-bar) display. Apps without a
-matching assignment are left unchanged. Restore never creates or removes
-Spaces; entries whose saved Space no longer exists are skipped and reported.
+an app go to its configured "default_spaces" Space if one is set for the
+current display count (marked "(default)"), otherwise to its most
+prevalent matched Space (marked "(fallback)"); tied targets use the Space
+currently shown on the primary (menu-bar) display. Apps with neither a
+configured default nor a matching assignment are left unchanged. Restore
+never creates or removes Spaces; entries whose saved Space no longer
+exists are skipped and reported.
 
 If the current per-display Space-count arrangement has changed since the
 layout was saved, you'll be asked to confirm before any windows are moved.
@@ -138,6 +141,7 @@ completes; use --no-hooks to skip running them for this invocation.`,
 					saved,
 					cfg.Pins[displayCount],
 					cfg.PinPrecedence,
+					cfg.DefaultSpaces[displayCount],
 					sortKey,
 					func(msg string) { cmd.Println(msg) },
 				)
@@ -328,6 +332,7 @@ connected displays.`,
 		}
 
 		printConfiguredPins(cmd, cfg.Pins[displayCount])
+		printConfiguredDefaultSpaces(cmd, cfg.DefaultSpaces[displayCount])
 
 		offCommands, onCommands := resolveHooks(cfg, displayCount)
 		printConfiguredHooks(cmd, offCommands, onCommands)
@@ -463,6 +468,26 @@ func printConfiguredPins(cmd *cobra.Command, pins []config.PinRule) {
 			space.DualLabel(pin.Space),
 			pin.BundleID,
 			displayTitle(pin.Title),
+		)
+	}
+}
+
+// printConfiguredDefaultSpaces prints a display count's configured
+// default-space rules as written in config.yaml — no window matching is
+// performed. Prints nothing when no default spaces are configured,
+// leaving the rest of "mumu show"'s output unaffected.
+func printConfiguredDefaultSpaces(cmd *cobra.Command, defaultSpaces []config.DefaultSpaceRule) {
+	if len(defaultSpaces) == 0 {
+		return
+	}
+
+	cmd.Printf("%d configured default space(s):\n", len(defaultSpaces))
+
+	for _, rule := range defaultSpaces {
+		cmd.Printf(
+			"  %s — %s\n",
+			space.DualLabel(rule.Space),
+			rule.BundleID,
 		)
 	}
 }

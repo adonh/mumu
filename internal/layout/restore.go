@@ -28,6 +28,11 @@ type SkippedEntry struct {
 	Entry    Entry
 	Reason   SkipReason
 	Fallback bool
+	// DefaultConfigured is set when this fallback placement (or its
+	// failure) was chosen because of a configured default_spaces rule,
+	// rather than the prevalent-Space heuristic. Always accompanied by
+	// Fallback = true; never set together with Fuzzy.
+	DefaultConfigured bool
 	// Fuzzy is set when the entry had already been matched to a window by
 	// approximate title similarity (see matchEntries) before the skip
 	// occurred, e.g. the move itself then failed. Never set together with
@@ -75,6 +80,10 @@ type moveTarget struct {
 	// fuzzy, and fuzzy targets come only from planDirectMoves, which never
 	// sets fallback, so a single target is never both.
 	fuzzy bool
+	// defaultConfigured marks a fallback target chosen because of a
+	// configured default_spaces rule rather than the prevalent-Space
+	// heuristic. Always accompanied by fallback = true.
+	defaultConfigured bool
 }
 
 type fallbackTarget struct {
@@ -84,10 +93,11 @@ type fallbackTarget struct {
 
 func moveFailureSkip(target moveTarget) SkippedEntry {
 	return SkippedEntry{
-		Entry:    target.entry,
-		Reason:   SkipMoveFailed,
-		Fallback: target.fallback,
-		Fuzzy:    target.fuzzy,
+		Entry:             target.entry,
+		Reason:            SkipMoveFailed,
+		Fallback:          target.fallback,
+		DefaultConfigured: target.defaultConfigured,
+		Fuzzy:             target.fuzzy,
 	}
 }
 
@@ -120,6 +130,15 @@ func moveFailureSkip(target moveTarget) SkippedEntry {
 // or empty pins slice when no pins are configured for the current display
 // count.
 //
+// defaultSpaces configures, per application bundle identifier, a fixed
+// application-level fallback target for that application's leftover
+// unclaimed windows: when present for a bundle ID, it always wins over
+// the prevalent-Space heuristic for that bundle's leftover windows this
+// restore, and it applies even when the bundle has zero valid
+// saved-entry assignments (a case that otherwise receives no fallback at
+// all). Pass a nil or empty slice when no default spaces are configured
+// for the current display count.
+//
 // progress, if non-nil, receives status updates while windows are scanned
 // and moved — the latter can take a while since each move is paced to let
 // WindowServer catch up; pass nil to discard them.
@@ -130,6 +149,7 @@ func Restore(
 	saved *Layout,
 	pins []config.PinRule,
 	precedence config.PinPrecedence,
+	defaultSpaces []config.DefaultSpaceRule,
 	sortKey SortKey,
 	progress ProgressFunc,
 ) (RestoreSummary, error) {
@@ -154,6 +174,7 @@ func Restore(
 	liveByBundle := groupLiveByBundle(liveEntries)
 	entriesByBundle := groupEntriesByBundle(saved.Entries)
 	pinsByBundle := pinEntriesByBundle(pins)
+	defaultSpacesMap := defaultSpacesByBundle(defaultSpaces)
 
 	var (
 		directMoves, fallbackMoves, pinMoves       []moveTarget
@@ -164,6 +185,7 @@ func Restore(
 		directMoves, directSkipped, fallbackMoves, fallbackSkipped = planLayoutPhase(
 			entriesByBundle,
 			liveByBundle,
+			defaultSpacesMap,
 		)
 
 		claimed := claimedWindowIDs(
@@ -193,6 +215,7 @@ func Restore(
 		directMoves, directSkipped, fallbackMoves, fallbackSkipped = planLayoutPhase(
 			entriesByBundle,
 			layoutLiveByBundle,
+			defaultSpacesMap,
 		)
 	}
 
@@ -214,14 +237,7 @@ func Restore(
 	}
 
 	for moveIdx, target := range toMove {
-		marker := ""
-		if target.fallback {
-			marker += " (fallback)"
-		}
-
-		if target.fuzzy {
-			marker += " (fuzzy)"
-		}
+		marker := moveMarker(target)
 
 		progress.emit(fmt.Sprintf(
 			"  %s %s — %s — %q%s",
@@ -244,6 +260,27 @@ func Restore(
 	}
 
 	return summary, nil
+}
+
+// moveMarker builds the trailing annotation for a restore progress line,
+// distinguishing a configured-default placement ("(default)") from a
+// prevalent-Space placement ("(fallback)") and, independently, an
+// approximate title match ("(fuzzy)").
+func moveMarker(target moveTarget) string {
+	marker := ""
+
+	switch {
+	case target.defaultConfigured:
+		marker += " (default)"
+	case target.fallback:
+		marker += " (fallback)"
+	}
+
+	if target.fuzzy {
+		marker += " (fuzzy)"
+	}
+
+	return marker
 }
 
 func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.AcrossSpacesEntry {
@@ -269,6 +306,7 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 func planLayoutPhase(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
+	defaultSpaces map[string]int,
 ) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
 	usedIndex := map[string]map[int]bool{}
 
@@ -284,6 +322,7 @@ func planLayoutPhase(
 		liveByBundle,
 		usedIndex,
 		validAssignmentOrdinals,
+		defaultSpaces,
 		primaryDisplayFallbackTarget,
 		space.LogicalSpaceID,
 	)
@@ -398,15 +437,11 @@ func planFallbackMoves(
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedByBundle map[string]map[int]bool,
 	assignmentOrdinals map[string][]int,
+	defaultSpaces map[string]int,
 	primaryDisplayTarget func() (fallbackTarget, error),
 	logicalSpaceID func(int) uint64,
 ) ([]moveTarget, []SkippedEntry) {
-	bundleIDs := make([]string, 0, len(assignmentOrdinals))
-	for bundleID := range assignmentOrdinals {
-		bundleIDs = append(bundleIDs, bundleID)
-	}
-
-	sort.Strings(bundleIDs)
+	bundleIDs := fallbackBundleIDs(assignmentOrdinals, defaultSpaces)
 
 	var (
 		targets []moveTarget
@@ -414,10 +449,24 @@ func planFallbackMoves(
 	)
 
 	for _, bundleID := range bundleIDs {
-		target, hasTarget, err := fallbackTargetForAssignments(
-			assignmentOrdinals[bundleID],
-			primaryDisplayTarget,
+		var (
+			target     fallbackTarget
+			hasTarget  bool
+			err        error
+			configured bool
 		)
+
+		if ordinal, ok := defaultSpaces[bundleID]; ok {
+			target = fallbackTarget{ordinal: ordinal}
+			hasTarget = true
+			configured = true
+		} else {
+			target, hasTarget, err = fallbackTargetForAssignments(
+				assignmentOrdinals[bundleID],
+				primaryDisplayTarget,
+			)
+		}
+
 		if !hasTarget {
 			continue
 		}
@@ -455,9 +504,10 @@ func planFallbackMoves(
 				skipped = append(
 					skipped,
 					SkippedEntry{
-						Entry:    entry,
-						Reason:   SkipFallbackTargetUnavailable,
-						Fallback: true,
+						Entry:             entry,
+						Reason:            SkipFallbackTargetUnavailable,
+						Fallback:          true,
+						DefaultConfigured: configured,
 					},
 				)
 
@@ -469,16 +519,46 @@ func planFallbackMoves(
 			targets = append(
 				targets,
 				moveTarget{
-					windowID: liveEntry.WindowID,
-					sid:      target.sid,
-					entry:    entry,
-					fallback: true,
+					windowID:          liveEntry.WindowID,
+					sid:               target.sid,
+					entry:             entry,
+					fallback:          true,
+					defaultConfigured: configured,
 				},
 			)
 		}
 	}
 
 	return targets, skipped
+}
+
+// fallbackBundleIDs returns the sorted union of bundle IDs with either a
+// valid saved-entry assignment this restore or a configured default_spaces
+// rule, so planFallbackMoves considers a bundle ID with a configured
+// default even when it has zero valid assignments.
+func fallbackBundleIDs(assignmentOrdinals map[string][]int, defaultSpaces map[string]int) []string {
+	seen := make(map[string]bool, len(assignmentOrdinals)+len(defaultSpaces))
+	bundleIDs := make([]string, 0, len(assignmentOrdinals)+len(defaultSpaces))
+
+	for bundleID := range assignmentOrdinals {
+		if !seen[bundleID] {
+			seen[bundleID] = true
+
+			bundleIDs = append(bundleIDs, bundleID)
+		}
+	}
+
+	for bundleID := range defaultSpaces {
+		if !seen[bundleID] {
+			seen[bundleID] = true
+
+			bundleIDs = append(bundleIDs, bundleID)
+		}
+	}
+
+	sort.Strings(bundleIDs)
+
+	return bundleIDs
 }
 
 func primaryDisplayFallbackTarget() (fallbackTarget, error) {

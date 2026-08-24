@@ -21,6 +21,7 @@ const (
 	testGlobalOn        = "global-on"
 	testLayoutOff       = "layout-off"
 	testLayoutOn        = "layout-on"
+	testSlackBundleID   = "com.tinyspeck.slackmacgap"
 )
 
 var errTestRestoreFailed = errors.New("restore failed")
@@ -270,14 +271,52 @@ func TestPrintConfiguredPins_ListsEachRule(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: "com.tinyspeck.slackmacgap", Title: "general", Space: 1},
+		{BundleID: testSlackBundleID, Title: "general", Space: 1},
 	})
 
 	got := output.String()
-	for _, want := range []string{"1 configured pin(s)", "com.tinyspeck.slackmacgap", "general"} {
+	for _, want := range []string{"1 configured pin(s)", testSlackBundleID, "general"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("printConfiguredPins output = %q, want it to contain %q", got, want)
 		}
+	}
+}
+
+func TestPrintConfiguredDefaultSpaces_ListsEachRule(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
+		{BundleID: testSlackBundleID, Space: 1},
+	})
+
+	got := output.String()
+	for _, want := range []string{"1 configured default space(s)", testSlackBundleID} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("printConfiguredDefaultSpaces output = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+func TestPrintConfiguredDefaultSpaces_NoneConfiguredPrintsNothing(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printConfiguredDefaultSpaces(cmd, nil)
+
+	if output.Len() != 0 {
+		t.Fatalf(
+			"printConfiguredDefaultSpaces output = %q, want empty output when none are configured",
+			output.String(),
+		)
 	}
 }
 

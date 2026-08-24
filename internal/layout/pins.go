@@ -28,6 +28,23 @@ func pinEntriesByBundle(pins []config.PinRule) map[string][]Entry {
 	return byBundle
 }
 
+// defaultSpacesByBundle converts a display count's configured
+// default-space rules into a bundle ID -> target logical ordinal lookup,
+// for planFallbackMoves to consult ahead of its prevalent-Space
+// heuristic. If the same bundle ID appears more than once (a config
+// mistake — config.Load does not reject it), the last rule for that
+// bundle ID wins, matching how a plain YAML map would behave for a
+// duplicate key.
+func defaultSpacesByBundle(rules []config.DefaultSpaceRule) map[string]int {
+	byBundle := make(map[string]int, len(rules))
+
+	for _, rule := range rules {
+		byBundle[rule.BundleID] = rule.Space
+	}
+
+	return byBundle
+}
+
 // claimedWindowIDs collects the live window IDs a set of move targets has
 // already claimed, for filtering a lower-precedence phase's candidate pool.
 func claimedWindowIDs(targets []moveTarget) map[uint32]bool {

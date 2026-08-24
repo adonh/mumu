@@ -351,6 +351,166 @@ func TestLoad_InvalidPinNonPositiveSpace(t *testing.T) {
 	}
 }
 
+func TestLoad_ParsesDefaultSpaces(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"default_spaces:\n" +
+		"  2:\n" +
+		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
+		"      space: 1\n" +
+		"  4:\n" +
+		"    - bundle_id: com.google.Chrome\n" +
+		"      space: 5\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	want := map[int][]config.DefaultSpaceRule{
+		2: {{BundleID: "com.tinyspeck.slackmacgap", Space: 1}},
+		4: {{BundleID: "com.google.Chrome", Space: 5}},
+	}
+
+	if len(cfg.DefaultSpaces) != len(want) {
+		t.Fatalf("cfg.DefaultSpaces = %+v, want %+v", cfg.DefaultSpaces, want)
+	}
+
+	for displayCount, wantRules := range want {
+		gotRules := cfg.DefaultSpaces[displayCount]
+		if len(gotRules) != len(wantRules) || gotRules[0] != wantRules[0] {
+			t.Fatalf("cfg.DefaultSpaces[%d] = %+v, want %+v", displayCount, gotRules, wantRules)
+		}
+	}
+}
+
+func TestLoad_DefaultSpacesAbsentDefaultsToEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	err = os.WriteFile(path, []byte("data_dir: /custom/data\n"), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(cfg.DefaultSpaces) != 0 {
+		t.Fatalf("cfg.DefaultSpaces = %+v, want empty", cfg.DefaultSpaces)
+	}
+}
+
+func TestLoad_InvalidDefaultSpaceMissingBundleID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"default_spaces:\n" +
+		"  2:\n" +
+		"    - space: 1\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for missing bundle_id")
+	}
+
+	if cfg != nil {
+		t.Fatalf("Load() returned non-nil Config on error: %+v", cfg)
+	}
+}
+
+func TestLoad_InvalidDefaultSpaceNonPositiveSpace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := config.FilePath()
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	contents := "data_dir: /custom/data\n" +
+		"default_spaces:\n" +
+		"  2:\n" +
+		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
+		"      space: 0\n"
+
+	err = os.WriteFile(path, []byte(contents), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = config.Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for non-positive space")
+	}
+}
+
+func TestLoad_DefaultFileDocumentsDefaultSpaces(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+
+	_, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	data, err := os.ReadFile(config.FilePath())
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	content := string(data)
+	for _, want := range []string{"default_spaces:", "bundle_id:", "space:"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("default config file missing %q in content:\n%s", want, content)
+		}
+	}
+}
+
 func TestLoad_InvalidPinPrecedence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
