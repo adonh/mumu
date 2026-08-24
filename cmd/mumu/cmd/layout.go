@@ -321,18 +321,22 @@ connected displays.`,
 		copy(entries, saved.Entries)
 		layout.SortEntries(entries, sortKey)
 
+		pins := cfg.Pins[displayCount]
+		defaultSpaces := cfg.DefaultSpaces[displayCount]
+		counterWidth := sharedCounterWidth(len(entries), len(pins), len(defaultSpaces))
+
 		for idx, entry := range entries {
 			cmd.Printf(
 				"  %s %s — %s — %q\n",
-				layout.FormatIndex(idx+1, len(entries)),
+				layout.FormatIndexWidth(idx+1, len(entries), counterWidth),
 				space.DualLabel(entry.Ordinal),
 				entry.BundleID,
 				displayTitle(entry.Title),
 			)
 		}
 
-		printConfiguredPins(cmd, cfg.Pins[displayCount])
-		printConfiguredDefaultSpaces(cmd, cfg.DefaultSpaces[displayCount])
+		printConfiguredPins(cmd, pins, sortKey, counterWidth)
+		printConfiguredDefaultSpaces(cmd, defaultSpaces, sortKey, counterWidth)
 
 		offCommands, onCommands := resolveHooks(cfg, displayCount)
 		printConfiguredHooks(cmd, offCommands, onCommands)
@@ -451,21 +455,52 @@ func displayTitle(title string) string {
 	return title
 }
 
+// sharedCounterWidth returns the "[N/TOTAL]" zero-padding width to use
+// across "mumu show"'s entries, pins, and default-space lists, based on
+// the widest total among them. Printing every list's counters at this
+// shared width — rather than each list computing its own width from its
+// own total — keeps the "—" separators and content lined up vertically
+// from one section to the next, even though the lists have different
+// lengths.
+func sharedCounterWidth(totals ...int) int {
+	width := 1
+	for _, total := range totals {
+		if w := len(strconv.Itoa(total)); w > width {
+			width = w
+		}
+	}
+
+	return width
+}
+
 // printConfiguredPins prints a display count's configured pin rules as
-// written in config.yaml — no window matching is performed. Prints
-// nothing when no pins are configured, leaving the rest of "mumu show"'s
-// output unaffected.
-func printConfiguredPins(cmd *cobra.Command, pins []config.PinRule) {
+// written in config.yaml, ordered by sortKey (the same "--sort" key used
+// for the saved-layout entry list) rather than raw config-file order — no
+// window matching is performed. counterWidth zero-pads the "[N/TOTAL]"
+// counter to match the other lists in "mumu show"'s output (see
+// sharedCounterWidth). Prints nothing when no pins are configured,
+// leaving the rest of "mumu show"'s output unaffected.
+func printConfiguredPins(
+	cmd *cobra.Command,
+	pins []config.PinRule,
+	sortKey layout.SortKey,
+	counterWidth int,
+) {
 	if len(pins) == 0 {
 		return
 	}
 
-	cmd.Printf("%d configured pin(s):\n", len(pins))
+	sorted := make([]config.PinRule, len(pins))
+	copy(sorted, pins)
+	layout.SortPinRules(sorted, sortKey)
 
-	for _, pin := range pins {
+	cmd.Printf("%d configured pin(s):\n", len(sorted))
+
+	for idx, pin := range sorted {
 		cmd.Printf(
-			"  %s — %s — %q\n",
-			space.DualLabel(pin.Space),
+			"  %s %s — %s — %q\n",
+			layout.FormatIndexWidth(idx+1, len(sorted), counterWidth),
+			space.DualLabel(pin.Ordinal),
 			pin.BundleID,
 			displayTitle(pin.Title),
 		)
@@ -473,20 +508,34 @@ func printConfiguredPins(cmd *cobra.Command, pins []config.PinRule) {
 }
 
 // printConfiguredDefaultSpaces prints a display count's configured
-// default-space rules as written in config.yaml — no window matching is
-// performed. Prints nothing when no default spaces are configured,
-// leaving the rest of "mumu show"'s output unaffected.
-func printConfiguredDefaultSpaces(cmd *cobra.Command, defaultSpaces []config.DefaultSpaceRule) {
+// default-space rules as written in config.yaml, ordered by sortKey (the
+// same "--sort" key used for the saved-layout entry list) rather than raw
+// config-file order — no window matching is performed. counterWidth
+// zero-pads the "[N/TOTAL]" counter to match the other lists in "mumu
+// show"'s output (see sharedCounterWidth). Prints nothing when no default
+// spaces are configured, leaving the rest of "mumu show"'s output
+// unaffected.
+func printConfiguredDefaultSpaces(
+	cmd *cobra.Command,
+	defaultSpaces []config.DefaultSpaceRule,
+	sortKey layout.SortKey,
+	counterWidth int,
+) {
 	if len(defaultSpaces) == 0 {
 		return
 	}
 
-	cmd.Printf("%d configured default space(s):\n", len(defaultSpaces))
+	sorted := make([]config.DefaultSpaceRule, len(defaultSpaces))
+	copy(sorted, defaultSpaces)
+	layout.SortDefaultSpaceRules(sorted, sortKey)
 
-	for _, rule := range defaultSpaces {
+	cmd.Printf("%d configured default space(s):\n", len(sorted))
+
+	for idx, rule := range sorted {
 		cmd.Printf(
-			"  %s — %s\n",
-			space.DualLabel(rule.Space),
+			"  %s %s — %s\n",
+			layout.FormatIndexWidth(idx+1, len(sorted), counterWidth),
+			space.DualLabel(rule.Ordinal),
 			rule.BundleID,
 		)
 	}
@@ -584,8 +633,8 @@ func addSortFlag(cmd *cobra.Command, dest *string) {
 	cmd.Flags().StringVar(
 		dest,
 		"sort",
-		string(layout.SortByDisplay),
-		`Order entries by: "display" (logical left-to-right Space number, default), `+
+		string(layout.SortByLogical),
+		`Order entries by: "logical" (mumu's own left-to-right Space number, default), `+
 			`"macos" (macOS Mission Control Space number), or "app" (bundle identifier)`,
 	)
 }

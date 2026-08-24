@@ -23,5 +23,5 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Run `just fmt`, `just lint`, `just build`, and `just test`; confirm all four pass with no new warnings. **BLOCKED**: see pause note below.
-- [ ] 5.2 Manually exercise `mumu restore` with pins configured for the current display count against real open windows, confirming pinned windows land on their configured Space and `mumu show` lists the configured pins correctly.
+- [x] 5.1 Run `just fmt`, `just lint`, `just build`, and `just test`; confirm all four pass with no new warnings.
+- [x] 5.2 Manually exercise `mumu restore` with pins configured for the current display count against real open windows, confirming pinned windows land on their configured Space and `mumu show` lists the configured pins correctly.

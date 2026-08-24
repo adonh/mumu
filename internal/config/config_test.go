@@ -191,11 +191,11 @@ func TestLoad_ParsesPinsAndPrecedence(t *testing.T) {
 		"  2:\n" +
 		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
 		"      title: \"Slack\"\n" +
-		"      space: 1\n" +
+		"      ordinal: 1\n" +
 		"  4:\n" +
 		"    - bundle_id: com.google.Chrome\n" +
 		"      title: \"GitHub\"\n" +
-		"      space: 5\n"
+		"      ordinal: 5\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -212,8 +212,8 @@ func TestLoad_ParsesPinsAndPrecedence(t *testing.T) {
 	}
 
 	want := map[int][]config.PinRule{
-		2: {{BundleID: "com.tinyspeck.slackmacgap", Title: "Slack", Space: 1}},
-		4: {{BundleID: "com.google.Chrome", Title: "GitHub", Space: 5}},
+		2: {{BundleID: "com.tinyspeck.slackmacgap", Title: "Slack", Ordinal: 1}},
+		4: {{BundleID: "com.google.Chrome", Title: "GitHub", Ordinal: 5}},
 	}
 
 	if len(cfg.Pins) != len(want) {
@@ -275,7 +275,7 @@ func TestLoad_InvalidPinMissingBundleID(t *testing.T) {
 		"pins:\n" +
 		"  2:\n" +
 		"    - title: \"Slack\"\n" +
-		"      space: 1\n"
+		"      ordinal: 1\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -308,7 +308,7 @@ func TestLoad_InvalidPinMissingTitle(t *testing.T) {
 		"pins:\n" +
 		"  2:\n" +
 		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
-		"      space: 1\n"
+		"      ordinal: 1\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -321,7 +321,7 @@ func TestLoad_InvalidPinMissingTitle(t *testing.T) {
 	}
 }
 
-func TestLoad_InvalidPinNonPositiveSpace(t *testing.T) {
+func TestLoad_InvalidPinNonPositiveOrdinal(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -338,7 +338,7 @@ func TestLoad_InvalidPinNonPositiveSpace(t *testing.T) {
 		"  2:\n" +
 		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
 		"      title: \"Slack\"\n" +
-		"      space: 0\n"
+		"      ordinal: 0\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -347,7 +347,7 @@ func TestLoad_InvalidPinNonPositiveSpace(t *testing.T) {
 
 	_, err = config.Load()
 	if err == nil {
-		t.Fatal("Load() error = nil, want error for non-positive space")
+		t.Fatal("Load() error = nil, want error for non-positive ordinal")
 	}
 }
 
@@ -367,10 +367,10 @@ func TestLoad_ParsesDefaultSpaces(t *testing.T) {
 		"default_spaces:\n" +
 		"  2:\n" +
 		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
-		"      space: 1\n" +
+		"      ordinal: 1\n" +
 		"  4:\n" +
 		"    - bundle_id: com.google.Chrome\n" +
-		"      space: 5\n"
+		"      ordinal: 5\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -383,8 +383,8 @@ func TestLoad_ParsesDefaultSpaces(t *testing.T) {
 	}
 
 	want := map[int][]config.DefaultSpaceRule{
-		2: {{BundleID: "com.tinyspeck.slackmacgap", Space: 1}},
-		4: {{BundleID: "com.google.Chrome", Space: 5}},
+		2: {{BundleID: "com.tinyspeck.slackmacgap", Ordinal: 1}},
+		4: {{BundleID: "com.google.Chrome", Ordinal: 5}},
 	}
 
 	if len(cfg.DefaultSpaces) != len(want) {
@@ -441,7 +441,7 @@ func TestLoad_InvalidDefaultSpaceMissingBundleID(t *testing.T) {
 	contents := "data_dir: /custom/data\n" +
 		"default_spaces:\n" +
 		"  2:\n" +
-		"    - space: 1\n"
+		"    - ordinal: 1\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -458,7 +458,7 @@ func TestLoad_InvalidDefaultSpaceMissingBundleID(t *testing.T) {
 	}
 }
 
-func TestLoad_InvalidDefaultSpaceNonPositiveSpace(t *testing.T) {
+func TestLoad_InvalidDefaultSpaceNonPositiveOrdinal(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -474,7 +474,7 @@ func TestLoad_InvalidDefaultSpaceNonPositiveSpace(t *testing.T) {
 		"default_spaces:\n" +
 		"  2:\n" +
 		"    - bundle_id: com.tinyspeck.slackmacgap\n" +
-		"      space: 0\n"
+		"      ordinal: 0\n"
 
 	err = os.WriteFile(path, []byte(contents), 0o644)
 	if err != nil {
@@ -483,7 +483,7 @@ func TestLoad_InvalidDefaultSpaceNonPositiveSpace(t *testing.T) {
 
 	_, err = config.Load()
 	if err == nil {
-		t.Fatal("Load() error = nil, want error for non-positive space")
+		t.Fatal("Load() error = nil, want error for non-positive ordinal")
 	}
 }
 
@@ -504,7 +504,7 @@ func TestLoad_DefaultFileDocumentsDefaultSpaces(t *testing.T) {
 	}
 
 	content := string(data)
-	for _, want := range []string{"default_spaces:", "bundle_id:", "space:"} {
+	for _, want := range []string{"default_spaces:", "bundle_id:", "ordinal:"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("default config file missing %q in content:\n%s", want, content)
 		}
@@ -554,7 +554,7 @@ func TestLoad_DefaultFileDocumentsPinsAndPrecedence(t *testing.T) {
 	}
 
 	content := string(data)
-	for _, want := range []string{"pins:", "pin_precedence:", "bundle_id:", "space:"} {
+	for _, want := range []string{"pins:", "pin_precedence:", "bundle_id:", "ordinal:"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("default config file missing %q in content:\n%s", want, content)
 		}

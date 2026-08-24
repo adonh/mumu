@@ -3,6 +3,7 @@ package layout
 import (
 	"sort"
 
+	"github.com/adonh/mumu/internal/config"
 	derrors "github.com/adonh/mumu/internal/errors"
 	"github.com/adonh/mumu/internal/space"
 )
@@ -15,9 +16,12 @@ type SortKey string
 
 // Supported SortKey values, matching the "--sort" flag's accepted strings.
 const (
-	// SortByDisplay orders by the logical left-to-right Space ordinal
-	// (mumu's display-sequence numbering). This is the default.
-	SortByDisplay SortKey = "display"
+	// SortByLogical orders by mumu's own logical left-to-right Space
+	// ordinal. This is the default. "Logical" (not "display") names this
+	// key deliberately: "display" is reserved for physical-monitor
+	// concepts (display count, connected displays, primary display)
+	// elsewhere in mumu.
+	SortByLogical SortKey = "logical"
 	// SortByMacOS orders by the current macOS Mission Control Space
 	// ordinal — the same ordinal macOS's own "Switch to Desktop <n>"
 	// keyboard shortcut uses.
@@ -30,12 +34,12 @@ const (
 // corresponding SortKey or an error naming the accepted values.
 func ParseSortKey(raw string) (SortKey, error) {
 	switch key := SortKey(raw); key {
-	case SortByDisplay, SortByMacOS, SortByApp:
+	case SortByLogical, SortByMacOS, SortByApp:
 		return key, nil
 	default:
 		return "", derrors.Newf(
 			derrors.CodeInvalidInput,
-			"invalid --sort value %q; must be one of: display, macos, app",
+			"invalid --sort value %q; must be one of: logical, macos, app",
 			raw,
 		)
 	}
@@ -55,8 +59,8 @@ func entryLess(entryA, entryB Entry, key SortKey, mcOrdinal func(int) int) bool 
 		if entryA.BundleID != entryB.BundleID {
 			return entryA.BundleID < entryB.BundleID
 		}
-	case SortByDisplay:
-		// The cascade below already starts with Ordinal, so SortByDisplay
+	case SortByLogical:
+		// The cascade below already starts with Ordinal, so SortByLogical
 		// needs no separate primary check.
 	}
 
@@ -111,5 +115,86 @@ func SortSkippedEntries(entries []SkippedEntry, key SortKey) {
 
 	sort.SliceStable(entries, func(i, j int) bool {
 		return entryLess(entries[i].Entry, entries[j].Entry, key, mcOrdinal)
+	})
+}
+
+// pinRuleLess reports whether ruleA should sort before ruleB for the given
+// key, using the same cascade as entryLess (Space ordinal, then bundle
+// identifier, then title).
+func pinRuleLess(ruleA, ruleB config.PinRule, key SortKey, mcOrdinal func(int) int) bool {
+	switch key {
+	case SortByMacOS:
+		if mcA, mcB := mcOrdinal(ruleA.Ordinal), mcOrdinal(ruleB.Ordinal); mcA != mcB {
+			return mcA < mcB
+		}
+	case SortByApp:
+		if ruleA.BundleID != ruleB.BundleID {
+			return ruleA.BundleID < ruleB.BundleID
+		}
+	case SortByLogical:
+		// The cascade below already starts with Ordinal, so SortByLogical
+		// needs no separate primary check.
+	}
+
+	if ruleA.Ordinal != ruleB.Ordinal {
+		return ruleA.Ordinal < ruleB.Ordinal
+	}
+
+	if ruleA.BundleID != ruleB.BundleID {
+		return ruleA.BundleID < ruleB.BundleID
+	}
+
+	return ruleA.Title < ruleB.Title
+}
+
+// defaultSpaceRuleLess reports whether ruleA should sort before ruleB for
+// the given key. It mirrors pinRuleLess but has no title to cascade
+// through, since default-space rules apply at the application level.
+func defaultSpaceRuleLess(
+	ruleA, ruleB config.DefaultSpaceRule,
+	key SortKey,
+	mcOrdinal func(int) int,
+) bool {
+	switch key {
+	case SortByMacOS:
+		if mcA, mcB := mcOrdinal(ruleA.Ordinal), mcOrdinal(ruleB.Ordinal); mcA != mcB {
+			return mcA < mcB
+		}
+	case SortByApp:
+		if ruleA.BundleID != ruleB.BundleID {
+			return ruleA.BundleID < ruleB.BundleID
+		}
+	case SortByLogical:
+		// The cascade below already starts with Ordinal, so SortByLogical
+		// needs no separate primary check.
+	}
+
+	if ruleA.Ordinal != ruleB.Ordinal {
+		return ruleA.Ordinal < ruleB.Ordinal
+	}
+
+	return ruleA.BundleID < ruleB.BundleID
+}
+
+// SortPinRules sorts pin rules in place according to key, using the same
+// ordering and tie-break cascade as SortEntries. This only affects display
+// order in "mumu show"; it does not change which pin applies during
+// "mumu restore".
+func SortPinRules(pins []config.PinRule, key SortKey) {
+	mcOrdinal := newMissionControlOrdinalLookup()
+
+	sort.SliceStable(pins, func(i, j int) bool {
+		return pinRuleLess(pins[i], pins[j], key, mcOrdinal)
+	})
+}
+
+// SortDefaultSpaceRules sorts default-space rules in place according to
+// key. This only affects display order in "mumu show"; it does not change
+// which default-space rule applies during "mumu restore".
+func SortDefaultSpaceRules(rules []config.DefaultSpaceRule, key SortKey) {
+	mcOrdinal := newMissionControlOrdinalLookup()
+
+	sort.SliceStable(rules, func(i, j int) bool {
+		return defaultSpaceRuleLess(rules[i], rules[j], key, mcOrdinal)
 	})
 }

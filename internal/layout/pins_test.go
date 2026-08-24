@@ -48,9 +48,9 @@ func TestPinEntriesByBundle_ConvertsWithNegativeIndex(t *testing.T) {
 	t.Parallel()
 
 	pins := []config.PinRule{
-		{BundleID: "com.tinyspeck.slackmacgap", Title: pinsTestTitle, Space: 1},
-		{BundleID: "com.google.Chrome", Title: "GitHub", Space: 3},
-		{BundleID: "com.google.Chrome", Title: "Mail", Space: 4},
+		{BundleID: "com.tinyspeck.slackmacgap", Title: pinsTestTitle, Ordinal: 1},
+		{BundleID: "com.google.Chrome", Title: "GitHub", Ordinal: 3},
+		{BundleID: "com.google.Chrome", Title: "Mail", Ordinal: 4},
 	}
 
 	byBundle := pinEntriesByBundle(pins)
@@ -148,7 +148,7 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Space: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: 1},
 	})
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
@@ -223,7 +223,7 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 		},
 	}
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Space: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: 1},
 	})
 
 	directMoves, directSkipped, fallbackMoves, fallbackSkipped := planLayoutPhaseForTest(
@@ -286,7 +286,7 @@ func TestPinPrecedence_DisplacesLoserToTheOtherWindow(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle + " chat", Space: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle + " chat", Ordinal: 1},
 	})
 
 	pinMoves, pinSkipped, _ := planDirectMoves(
@@ -334,7 +334,7 @@ func TestPinMatching_ApproximateTitleMatch(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "Inbox - Mail", Space: 2},
+		{BundleID: fallbackTestBundle, Title: "Inbox - Mail", Ordinal: 2},
 	})
 
 	moves, skipped, _ := planDirectMoves(
@@ -374,8 +374,8 @@ func TestPinMatching_MultiplePinsResolveIndependently(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "general channel", Space: 1},
-		{BundleID: fallbackTestBundle, Title: "random channel", Space: 2},
+		{BundleID: fallbackTestBundle, Title: "general channel", Ordinal: 1},
+		{BundleID: fallbackTestBundle, Title: "random channel", Ordinal: 2},
 	})
 
 	moves, skipped, _ := planDirectMoves(
@@ -415,7 +415,7 @@ func TestPinPrecedence_UnmatchedPinGetsNoFallback(t *testing.T) {
 	t.Parallel()
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "totally unmatched", Space: 1},
+		{BundleID: fallbackTestBundle, Title: "totally unmatched", Ordinal: 1},
 	})
 
 	pinMoves, pinSkipped, _ := planDirectMoves(

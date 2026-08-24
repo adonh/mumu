@@ -22,6 +22,9 @@ const (
 	testLayoutOff       = "layout-off"
 	testLayoutOn        = "layout-on"
 	testSlackBundleID   = "com.tinyspeck.slackmacgap"
+	testBundleChrome    = "com.google.Chrome"
+	testTitleGeneral    = "general"
+	testTitleChrome     = "Chrome"
 )
 
 var errTestRestoreFailed = errors.New("restore failed")
@@ -223,7 +226,7 @@ func TestPrintRestoreSummaryMarksFallbackFailures(t *testing.T) {
 				},
 			},
 		},
-		layout.SortByDisplay,
+		layout.SortByLogical,
 	)
 
 	if !strings.Contains(output.String(), "(fallback)") {
@@ -254,11 +257,81 @@ func TestPrintRestoreSummaryMarksFuzzyMatches(t *testing.T) {
 				},
 			},
 		},
-		layout.SortByDisplay,
+		layout.SortByLogical,
 	)
 
 	if !strings.Contains(output.String(), "(fuzzy)") {
 		t.Fatalf("restore summary = %q, want fuzzy marker", output.String())
+	}
+}
+
+func TestSharedCounterWidth(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		totals []int
+		want   int
+	}{
+		{name: "all single digit", totals: []int{1, 6, 9}, want: 1},
+		{name: "widest total drives width", totals: []int{29, 11, 6}, want: 2},
+		{name: "empty lists default to width 1", totals: []int{0, 0, 0}, want: 1},
+		{name: "no totals defaults to width 1", totals: nil, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := sharedCounterWidth(tt.totals...); got != tt.want {
+				t.Fatalf("sharedCounterWidth(%v) = %d, want %d", tt.totals, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintConfiguredPins_UsesSharedCounterWidth(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	// counterWidth of 2 simulates a sibling list (e.g. entries) with a
+	// double-digit total, even though this pins list itself only has a
+	// single-digit total.
+	printConfiguredPins(cmd, []config.PinRule{
+		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+	}, layout.SortByLogical, 2)
+
+	got := output.String()
+	if !strings.Contains(got, "[01/01]") {
+		t.Fatalf(
+			"printConfiguredPins output = %q, want counter zero-padded to shared width [01/01]",
+			got,
+		)
+	}
+}
+
+func TestPrintConfiguredDefaultSpaces_UsesSharedCounterWidth(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
+		{BundleID: testSlackBundleID, Ordinal: 1},
+	}, layout.SortByLogical, 2)
+
+	got := output.String()
+	if !strings.Contains(got, "[01/01]") {
+		t.Fatalf(
+			"printConfiguredDefaultSpaces output = %q, want counter zero-padded to shared width [01/01]",
+			got,
+		)
 	}
 }
 
@@ -271,14 +344,101 @@ func TestPrintConfiguredPins_ListsEachRule(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testSlackBundleID, Title: "general", Space: 1},
-	})
+		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+	}, layout.SortByLogical, 1)
 
 	got := output.String()
-	for _, want := range []string{"1 configured pin(s)", testSlackBundleID, "general"} {
+	for _, want := range []string{"1 configured pin(s)", "[1/1]", testSlackBundleID, testTitleGeneral} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("printConfiguredPins output = %q, want it to contain %q", got, want)
 		}
+	}
+}
+
+func TestPrintConfiguredPins_CountersAreSequential(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printConfiguredPins(cmd, []config.PinRule{
+		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 2},
+	}, layout.SortByLogical, 1)
+
+	got := output.String()
+	for _, want := range []string{"[1/2]", "[2/2]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("printConfiguredPins output = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+func TestPrintConfiguredPins_SortedByKey(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	// Scrambled config-file order: Space 5 listed before Space 2.
+	printConfiguredPins(cmd, []config.PinRule{
+		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 5},
+		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 2},
+	}, layout.SortByLogical, 1)
+
+	got := output.String()
+	slackIdx := strings.Index(got, testSlackBundleID)
+	chromeIdx := strings.Index(got, testBundleChrome)
+
+	if slackIdx == -1 || chromeIdx == -1 {
+		t.Fatalf("printConfiguredPins output = %q, want both bundle IDs present", got)
+	}
+
+	if slackIdx > chromeIdx {
+		t.Fatalf(
+			"printConfiguredPins(SortByLogical) output = %q, want Space 2 (%s) before Space 5 (%s)",
+			got,
+			testSlackBundleID,
+			testBundleChrome,
+		)
+	}
+}
+
+func TestPrintConfiguredPins_SortedByAppKey(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	// Config-file order lists Slack (higher bundle ID) before Chrome, at
+	// a lower Space than Chrome, so only a bundle-identifier sort proves
+	// "--sort app" is actually applied rather than falling back to Space.
+	printConfiguredPins(cmd, []config.PinRule{
+		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 9},
+	}, layout.SortByApp, 1)
+
+	got := output.String()
+	chromeIdx := strings.Index(got, testBundleChrome)
+	slackIdx := strings.Index(got, testSlackBundleID)
+
+	if chromeIdx == -1 || slackIdx == -1 {
+		t.Fatalf("printConfiguredPins output = %q, want both bundle IDs present", got)
+	}
+
+	if chromeIdx > slackIdx {
+		t.Fatalf(
+			"printConfiguredPins(SortByApp) output = %q, want %q before %q by bundle identifier",
+			got,
+			testBundleChrome,
+			testSlackBundleID,
+		)
 	}
 }
 
@@ -291,14 +451,67 @@ func TestPrintConfiguredDefaultSpaces_ListsEachRule(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
-		{BundleID: testSlackBundleID, Space: 1},
-	})
+		{BundleID: testSlackBundleID, Ordinal: 1},
+	}, layout.SortByLogical, 1)
 
 	got := output.String()
-	for _, want := range []string{"1 configured default space(s)", testSlackBundleID} {
+	for _, want := range []string{"1 configured default space(s)", "[1/1]", testSlackBundleID} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("printConfiguredDefaultSpaces output = %q, want it to contain %q", got, want)
 		}
+	}
+}
+
+func TestPrintConfiguredDefaultSpaces_CountersAreSequential(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
+		{BundleID: testSlackBundleID, Ordinal: 1},
+		{BundleID: testBundleChrome, Ordinal: 2},
+	}, layout.SortByLogical, 1)
+
+	got := output.String()
+	for _, want := range []string{"[1/2]", "[2/2]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("printConfiguredDefaultSpaces output = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+func TestPrintConfiguredDefaultSpaces_SortedByKey(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	// Scrambled config-file order: Space 5 listed before Space 2.
+	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
+		{BundleID: testBundleChrome, Ordinal: 5},
+		{BundleID: testSlackBundleID, Ordinal: 2},
+	}, layout.SortByLogical, 1)
+
+	got := output.String()
+	slackIdx := strings.Index(got, testSlackBundleID)
+	chromeIdx := strings.Index(got, testBundleChrome)
+
+	if slackIdx == -1 || chromeIdx == -1 {
+		t.Fatalf("printConfiguredDefaultSpaces output = %q, want both bundle IDs present", got)
+	}
+
+	if slackIdx > chromeIdx {
+		t.Fatalf(
+			"printConfiguredDefaultSpaces(SortByLogical) output = %q, want Space 2 (%s) before Space 5 (%s)",
+			got,
+			testSlackBundleID,
+			testBundleChrome,
+		)
 	}
 }
 
@@ -310,7 +523,7 @@ func TestPrintConfiguredDefaultSpaces_NoneConfiguredPrintsNothing(t *testing.T) 
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 
-	printConfiguredDefaultSpaces(cmd, nil)
+	printConfiguredDefaultSpaces(cmd, nil, layout.SortByLogical, 1)
 
 	if output.Len() != 0 {
 		t.Fatalf(
@@ -460,7 +673,7 @@ func TestPrintConfiguredPins_NoPinsPrintsNothing(t *testing.T) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 
-	printConfiguredPins(cmd, nil)
+	printConfiguredPins(cmd, nil, layout.SortByLogical, 1)
 
 	if output.Len() != 0 {
 		t.Fatalf(

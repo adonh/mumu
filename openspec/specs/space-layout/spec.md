@@ -82,6 +82,8 @@ After completing those matching steps for an application, the system SHALL place
 
 The system SHALL report each fallback placement in restore progress output, distinguishing a configured-default placement from a prevalent-Space placement, and SHALL move each currently open window at most once.
 
+When the `window-pinning` capability's pin rules are configured to take precedence (the default), any currently open window already claimed by a matched pin rule SHALL be excluded from this saved-layout matching entirely, as if it were not currently open. When saved-layout entries are configured to take precedence instead, this saved-layout matching (including its application-level fallback placement) SHALL run unaffected by pin rules, and pin matching SHALL only run afterward against windows this process left unclaimed.
+
 #### Scenario: Exact title match
 
 - **WHEN** a saved entry's title exactly matches exactly one of that application's currently open window titles, and no other open window shares that same set of words
@@ -167,6 +169,11 @@ The system SHALL report each fallback placement in restore progress output, dist
 - **WHEN** an application has a configured `default_spaces` rule targeting logical Space 8 for the current display count, and none of its currently open windows were matched to any valid saved-entry assignment this restore
 - **THEN** the system moves that application's currently open windows to logical Space 8 and reports the placement as a configured-default placement
 
+#### Scenario: Windows claimed by a higher-precedence pin are excluded from saved-layout matching
+
+- **WHEN** pin rules take precedence (the default) and a currently open window has already been claimed by a matched pin rule
+- **THEN** that window is not considered by saved-layout matching or its application-level fallback, as if it were not currently open
+
 ### Requirement: Restore skips applications that are not running
 
 If a saved window entry's application is not currently running, the system SHALL skip that entry, SHALL NOT launch the application, and SHALL report the skipped entry to the user.
@@ -215,7 +222,7 @@ Saved layouts SHALL contain only application identity, window title, and logical
 #### Scenario: Previewing a saved layout
 
 - **WHEN** a user runs `mumu show` for a display count that has a saved layout
-- **THEN** the system displays that layout's window entries and that display count's effective hook-command preview, without moving any windows or running any command
+- **THEN** the system displays that layout's window entries, that display count's configured pin rules, and that display count's effective hook-command preview, without moving any windows or running any command
 
 #### Scenario: Previewing configured default spaces
 
@@ -291,12 +298,12 @@ All layout save and restore operations SHALL function using only user-grantable 
 
 ### Requirement: Configurable output ordering for layout entries
 
-`mumu show` and `mumu restore` SHALL accept a `--sort` flag with values `display` (default), `macos`, and `app`, controlling the order in which per-window entries are printed: `display` orders by the logical left-to-right Space ordinal ascending; `macos` orders by the macOS Mission Control Space ordinal ascending (the same numbering macOS's own "Switch to Desktop `<n>`" shortcut uses); `app` orders by application bundle identifier ascending. This ordering SHALL apply to `mumu show`'s entry listing, `mumu restore`'s per-window move progress lines, and the ordering of entries within each reason group of `mumu restore`'s skip summary. Regardless of which key is selected as primary, entries with an equal primary-key value SHALL be ordered by cascading through the remaining keys in the fixed priority: Space ordinal, then bundle identifier, then window title. This SHALL NOT change which windows are matched, moved, or skipped, nor anything persisted in a saved layout file — it only affects display order.
+`mumu show` and `mumu restore` SHALL accept a `--sort` flag with values `logical` (default), `macos`, and `app`, controlling the order in which per-window entries are printed: `logical` orders by mumu's own logical left-to-right Space ordinal ascending; `macos` orders by the macOS Mission Control Space ordinal ascending (the same numbering macOS's own "Switch to Desktop `<n>`" shortcut uses); `app` orders by application bundle identifier ascending. This ordering SHALL apply to `mumu show`'s entry listing, `mumu show`'s configured-pins and configured-default-spaces previews, `mumu restore`'s per-window move progress lines, and the ordering of entries within each reason group of `mumu restore`'s skip summary. Regardless of which key is selected as primary, entries with an equal primary-key value SHALL be ordered by cascading through the remaining keys in the fixed priority: Space ordinal, then bundle identifier, then window title (pin and default-space rules have no title, so they cascade only through Space ordinal then bundle identifier). This SHALL NOT change which windows are matched, moved, or skipped, which pin or default-space rule applies, nor anything persisted in a saved layout file or `config.yaml` — it only affects display order. The word "display" is reserved exclusively for physical-monitor concepts (e.g. the current display count, connected displays, the primary display) and SHALL NOT be used to name this sort key or its default value, to avoid confusion with logical Space ordering.
 
-#### Scenario: Default order is display sequence
+#### Scenario: Default order is logical Space sequence
 
 - **WHEN** a user runs `mumu show` or `mumu restore` without passing `--sort`
-- **THEN** entries are printed ordered by logical left-to-right Space ordinal ascending
+- **THEN** entries are printed ordered by mumu's own logical left-to-right Space ordinal ascending
 
 #### Scenario: Sorting by macOS Mission Control Space number
 
@@ -310,13 +317,33 @@ All layout save and restore operations SHALL function using only user-grantable 
 
 #### Scenario: Tie-break when the primary sort key is equal
 
-- **WHEN** two or more entries share the same value for the selected `--sort` key (e.g. two windows on the same Space when sorting by `display`)
+- **WHEN** two or more entries share the same value for the selected `--sort` key (e.g. two windows on the same Space when sorting by `logical`)
 - **THEN** those entries are ordered relative to each other by Space ordinal, then bundle identifier, then window title, in that order
 
 #### Scenario: Sort order applies within restore's skip summary
 
 - **WHEN** `mumu restore` reports multiple skipped entries sharing the same skip reason
 - **THEN** those entries are listed within that reason group ordered according to the selected `--sort` key
+
+#### Scenario: The old "display" sort value is no longer accepted
+
+- **WHEN** a user passes `--sort display` (the value's pre-rename name) to `mumu show` or `mumu restore`
+- **THEN** the system reports a clear error naming the accepted values (`logical`, `macos`, `app`) and makes no changes
+
+#### Scenario: Sort order applies to mumu show's configured-pins preview
+
+- **WHEN** a user runs `mumu show --sort app` for a display count with multiple configured pin rules
+- **THEN** the "configured pin(s)" section lists those rules ordered by application bundle identifier ascending, rather than their order in `config.yaml`
+
+#### Scenario: Sort order applies to mumu show's configured-default-spaces preview
+
+- **WHEN** a user runs `mumu show` (default `--sort logical`) for a display count with multiple configured `default_spaces` rules
+- **THEN** the "configured default space(s)" section lists those rules ordered by target Space ordinal ascending, rather than their order in `config.yaml`
+
+#### Scenario: Hook command previews remain unsorted
+
+- **WHEN** a user runs `mumu show` for a display count with configured `hooks.off`/`hooks.on` commands
+- **THEN** those commands are still listed in their configured execution order, unaffected by `--sort`
 
 ### Requirement: Flat top-level command surface
 

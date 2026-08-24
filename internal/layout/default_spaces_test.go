@@ -12,8 +12,8 @@ func TestDefaultSpacesByBundle_Converts(t *testing.T) {
 	t.Parallel()
 
 	rules := []config.DefaultSpaceRule{
-		{BundleID: defaultSpacesTestSlackBundle, Space: 1},
-		{BundleID: "com.example.chrome", Space: 5},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 1},
+		{BundleID: "com.example.chrome", Ordinal: 5},
 	}
 
 	got := defaultSpacesByBundle(rules)
@@ -38,8 +38,8 @@ func TestDefaultSpacesByBundle_DuplicateBundleIDLastWins(t *testing.T) {
 	t.Parallel()
 
 	rules := []config.DefaultSpaceRule{
-		{BundleID: defaultSpacesTestSlackBundle, Space: 1},
-		{BundleID: defaultSpacesTestSlackBundle, Space: 3},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 1},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 3},
 	}
 
 	got := defaultSpacesByBundle(rules)
