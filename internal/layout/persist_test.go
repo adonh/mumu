@@ -3,10 +3,12 @@ package layout_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/adonh/mumu/internal/layout"
+	"github.com/adonh/mumu/internal/space"
 )
 
 // setDataDir points mumu's config at a fresh temp HOME so layout
@@ -39,7 +41,12 @@ func TestSaveAndLoad_RoundTrip(t *testing.T) {
 		SpaceCounts:  []int{2, 3},
 		SavedAt:      time.Now().UTC().Truncate(time.Second),
 		Entries: []layout.Entry{
-			{BundleID: "com.example.App", Title: "Window", Index: 0, Ordinal: 1},
+			{
+				BundleID: "com.example.App",
+				Title:    "Window",
+				Index:    0,
+				Ordinal:  space.Ordinal{Display: 1, Space: 1},
+			},
 		},
 	}
 
@@ -213,5 +220,53 @@ func TestLoad_MalformedLayoutFile(t *testing.T) {
 	_, err = layout.Load(2)
 	if err == nil {
 		t.Fatal("Load() error = nil, want error for malformed layout file")
+	}
+
+	if strings.Contains(err.Error(), "run 'mumu save' again") {
+		t.Fatalf(
+			"Load() error = %v, want the malformed-JSON error, not the schema-version error",
+			err,
+		)
+	}
+}
+
+func TestLoad_OutdatedSchemaVersion(t *testing.T) {
+	setDataDir(t)
+
+	dir := layoutsDirForTest(t)
+
+	err := os.MkdirAll(dir, 0o755)
+	if err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	// Schema version 1's Entry.Ordinal was a bare number, not a
+	// {"display","space"} object — this is what an old-schema saved
+	// layout file actually looked like on disk.
+	oldSchemaLayout := `{
+		"schemaVersion": 1,
+		"displayCount": 2,
+		"spaceCounts": [2, 3],
+		"entries": [
+			{"bundleId": "com.example.App", "title": "Window", "index": 0, "ordinal": 1}
+		],
+		"savedAt": "2024-01-01T00:00:00Z"
+	}`
+
+	err = os.WriteFile(filepath.Join(dir, "2.json"), []byte(oldSchemaLayout), 0o644)
+	if err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	_, err = layout.Load(2)
+	if err == nil {
+		t.Fatal("Load() error = nil, want error for outdated schema version")
+	}
+
+	if !strings.Contains(err.Error(), "run 'mumu save' again") {
+		t.Fatalf(
+			"Load() error = %v, want a clear \"run 'mumu save' again\" message",
+			err,
+		)
 	}
 }

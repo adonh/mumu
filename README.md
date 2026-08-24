@@ -51,7 +51,7 @@ Other options (Nix flake, build from source) → [Installation Guide](docs/INSTA
 | Delete a saved layout             | `mumu delete`        |
 | Check permission status           | `mumu status`        |
 
-Layouts are saved and looked up by the number of currently connected displays, so plugging in (or unplugging) a monitor automatically finds the right saved arrangement. Restore only ever moves windows belonging to apps that are already running — it never launches anything, and never creates or deletes Spaces. Space numbers count left to right across all your displays, matching how you actually see them laid out, regardless of which display macOS considers "primary."
+Layouts are saved and looked up by the number of currently connected displays, so plugging in (or unplugging) a monitor automatically finds the right saved arrangement. Restore only ever moves windows belonging to apps that are already running — it never launches anything, and never creates or deletes Spaces. Space numbers are a two-part `<display>:<space>` ordinal (e.g. `2:01`), counting displays left to right and each display's own Spaces left to right within it, matching how you actually see them laid out, regardless of which display macOS considers "primary."
 
 Full reference → [CLI Guide](docs/CLI.md)
 

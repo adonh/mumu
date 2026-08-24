@@ -92,6 +92,11 @@ func Load(displayCount int) (*Layout, error) {
 		return nil, derrors.Wrapf(err, derrors.CodeConfigIOFailed, "reading layout file %s", path)
 	}
 
+	err = checkSchemaVersion(data, path)
+	if err != nil {
+		return nil, err
+	}
+
 	var loaded Layout
 
 	err = json.Unmarshal(data, &loaded)
@@ -105,6 +110,38 @@ func Load(displayCount int) (*Layout, error) {
 	}
 
 	return &loaded, nil
+}
+
+// checkSchemaVersion pre-parses just a saved layout file's schemaVersion
+// field, ahead of the full Layout unmarshal, so a file written by an
+// older mumu version (whose Entry.Ordinal shape no longer matches — see
+// SchemaVersion's doc comment) fails with a clear, actionable error
+// instead of a raw encoding/json type-mismatch error from the full
+// unmarshal.
+func checkSchemaVersion(data []byte, path string) error {
+	var versioned struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+
+	err := json.Unmarshal(data, &versioned)
+	if err != nil {
+		// Malformed JSON: let the full unmarshal below produce today's
+		// existing "malformed saved-layout file" error.
+		return nil //nolint:nilerr // intentional: defer to the full unmarshal's error.
+	}
+
+	if versioned.SchemaVersion != SchemaVersion {
+		return derrors.Newf(
+			derrors.CodeSerializationFailed,
+			"saved layout file %s was written by an incompatible mumu version "+
+				"(schema %d, expected %d); run 'mumu save' again to recreate it",
+			path,
+			versioned.SchemaVersion,
+			SchemaVersion,
+		)
+	}
+
+	return nil
 }
 
 // Exists reports whether a saved layout exists for the given display count.

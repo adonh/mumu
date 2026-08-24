@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/adonh/mumu/internal/config"
+	"github.com/adonh/mumu/internal/space"
 	"github.com/adonh/mumu/internal/window"
 )
 
@@ -22,23 +23,22 @@ func planLayoutPhaseForTest(
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 ) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
 	usedIndex := map[string]map[int]bool{}
-	identity := func(ordinal int) uint64 { return uint64(ordinal) }
 
 	direct, directSkipped, validAssignmentOrdinals := planDirectMoves(
 		entriesByBundle,
 		liveByBundle,
 		usedIndex,
-		10,
-		identity,
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	fallback, fallbackSkipped := planFallbackMoves(
 		liveByBundle,
 		usedIndex,
 		validAssignmentOrdinals,
-		map[string]int{},
+		map[string]space.Ordinal{},
 		primaryDisplayFallbackTarget,
-		identity,
+		identityIDForOrdinal,
 	)
 
 	return direct, directSkipped, fallback, fallbackSkipped
@@ -48,9 +48,9 @@ func TestPinEntriesByBundle_ConvertsWithNegativeIndex(t *testing.T) {
 	t.Parallel()
 
 	pins := []config.PinRule{
-		{BundleID: "com.tinyspeck.slackmacgap", Title: pinsTestTitle, Ordinal: 1},
-		{BundleID: "com.google.Chrome", Title: "GitHub", Ordinal: 3},
-		{BundleID: "com.google.Chrome", Title: "Mail", Ordinal: 4},
+		{BundleID: "com.tinyspeck.slackmacgap", Title: pinsTestTitle, Ordinal: ord(1)},
+		{BundleID: "com.google.Chrome", Title: "GitHub", Ordinal: ord(3)},
+		{BundleID: "com.google.Chrome", Title: "Mail", Ordinal: ord(4)},
 	}
 
 	byBundle := pinEntriesByBundle(pins)
@@ -60,7 +60,7 @@ func TestPinEntriesByBundle_ConvertsWithNegativeIndex(t *testing.T) {
 	}
 
 	slackEntries := byBundle["com.tinyspeck.slackmacgap"]
-	if len(slackEntries) != 1 || slackEntries[0].Index != -1 || slackEntries[0].Ordinal != 1 {
+	if len(slackEntries) != 1 || slackEntries[0].Index != -1 || slackEntries[0].Ordinal != ord(1) {
 		t.Fatalf("slack entries = %#v, want one entry with Index -1, Ordinal 1", slackEntries)
 	}
 
@@ -148,11 +148,11 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: ord(1)},
 	})
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: pinsTestTitle, Index: 0, Ordinal: 9},
+			{BundleID: fallbackTestBundle, Title: pinsTestTitle, Index: 0, Ordinal: ord(9)},
 		},
 	}
 
@@ -160,8 +160,8 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 		pinsByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(pinSkipped) != 0 || len(pinMoves) != 1 || pinMoves[0].windowID != 1 {
@@ -219,11 +219,11 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: pinsTestTitle, Index: 0, Ordinal: 9},
+			{BundleID: fallbackTestBundle, Title: pinsTestTitle, Index: 0, Ordinal: ord(9)},
 		},
 	}
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle, Ordinal: ord(1)},
 	})
 
 	directMoves, directSkipped, fallbackMoves, fallbackSkipped := planLayoutPhaseForTest(
@@ -248,8 +248,8 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 		pinsByBundle,
 		pinLive,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(pinMoves) != 0 {
@@ -286,15 +286,15 @@ func TestPinPrecedence_DisplacesLoserToTheOtherWindow(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: pinsTestTitle + " chat", Ordinal: 1},
+		{BundleID: fallbackTestBundle, Title: pinsTestTitle + " chat", Ordinal: ord(1)},
 	})
 
 	pinMoves, pinSkipped, _ := planDirectMoves(
 		pinsByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(pinSkipped) != 0 || len(pinMoves) != 1 || pinMoves[0].windowID != 1 {
@@ -334,15 +334,15 @@ func TestPinMatching_ApproximateTitleMatch(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "Inbox - Mail", Ordinal: 2},
+		{BundleID: fallbackTestBundle, Title: "Inbox - Mail", Ordinal: ord(2)},
 	})
 
 	moves, skipped, _ := planDirectMoves(
 		pinsByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(skipped) != 0 {
@@ -374,16 +374,16 @@ func TestPinMatching_MultiplePinsResolveIndependently(t *testing.T) {
 	}
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "general channel", Ordinal: 1},
-		{BundleID: fallbackTestBundle, Title: "random channel", Ordinal: 2},
+		{BundleID: fallbackTestBundle, Title: "general channel", Ordinal: ord(1)},
+		{BundleID: fallbackTestBundle, Title: "random channel", Ordinal: ord(2)},
 	})
 
 	moves, skipped, _ := planDirectMoves(
 		pinsByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(skipped) != 0 {
@@ -394,16 +394,16 @@ func TestPinMatching_MultiplePinsResolveIndependently(t *testing.T) {
 		t.Fatalf("moves = %#v, want 2 moves", moves)
 	}
 
-	byOrdinal := map[int]moveTarget{}
+	byOrdinal := map[space.Ordinal]moveTarget{}
 	for _, move := range moves {
 		byOrdinal[move.entry.Ordinal] = move
 	}
 
-	if got := byOrdinal[1]; got.windowID != 1 || got.fuzzy {
+	if got := byOrdinal[ord(1)]; got.windowID != 1 || got.fuzzy {
 		t.Fatalf("space 1 target = %#v, want window 1, not fuzzy (exact match)", got)
 	}
 
-	if got := byOrdinal[2]; got.windowID != 2 || got.fuzzy {
+	if got := byOrdinal[ord(2)]; got.windowID != 2 || got.fuzzy {
 		t.Fatalf("space 2 target = %#v, want window 2, not fuzzy (exact match)", got)
 	}
 }
@@ -415,15 +415,15 @@ func TestPinPrecedence_UnmatchedPinGetsNoFallback(t *testing.T) {
 	t.Parallel()
 
 	pinsByBundle := pinEntriesByBundle([]config.PinRule{
-		{BundleID: fallbackTestBundle, Title: "totally unmatched", Ordinal: 1},
+		{BundleID: fallbackTestBundle, Title: "totally unmatched", Ordinal: ord(1)},
 	})
 
 	pinMoves, pinSkipped, _ := planDirectMoves(
 		pinsByBundle,
 		map[string][]window.AcrossSpacesEntry{},
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(pinMoves) != 0 {

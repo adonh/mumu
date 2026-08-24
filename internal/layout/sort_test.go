@@ -17,20 +17,27 @@ const (
 	testTitleBeta    = "Beta"
 )
 
+// ord builds a single-display test Ordinal, since every existing test's
+// scenarios only ever exercised one display's worth of Space numbers
+// before this ordinal became two-part.
+func ord(spaceNum int) space.Ordinal {
+	return space.Ordinal{Display: 1, Space: spaceNum}
+}
+
 // stubMCOrdinal returns a lookup function usable as entryLess's mcOrdinal
 // parameter without any native calls, backed by a fixed logical-ordinal ->
 // Mission Control-ordinal mapping.
-func stubMCOrdinal(mapping map[int]int) func(int) int {
-	return func(logicalOrdinal int) int {
-		return mapping[logicalOrdinal]
+func stubMCOrdinal(mapping map[space.Ordinal]int) func(space.Ordinal) int {
+	return func(ordinal space.Ordinal) int {
+		return mapping[ordinal]
 	}
 }
 
 func TestEntryLess_SortByLogical(t *testing.T) {
 	t.Parallel()
 
-	entryA := Entry{Ordinal: 1, BundleID: testBundleB, Title: "Z"}
-	entryB := Entry{Ordinal: 2, BundleID: testBundleA, Title: "A"}
+	entryA := Entry{Ordinal: ord(1), BundleID: testBundleB, Title: "Z"}
+	entryB := Entry{Ordinal: ord(2), BundleID: testBundleA, Title: "A"}
 
 	mcOrdinal := stubMCOrdinal(nil)
 
@@ -48,8 +55,8 @@ func TestEntryLess_SortByLogical(t *testing.T) {
 func TestEntryLess_SortByApp(t *testing.T) {
 	t.Parallel()
 
-	entryA := Entry{Ordinal: 5, BundleID: testBundleSafari, Title: "Z"}
-	entryB := Entry{Ordinal: 1, BundleID: testBundleChrome, Title: "A"}
+	entryA := Entry{Ordinal: ord(5), BundleID: testBundleSafari, Title: "Z"}
+	entryB := Entry{Ordinal: ord(1), BundleID: testBundleChrome, Title: "A"}
 
 	mcOrdinal := stubMCOrdinal(nil)
 
@@ -67,10 +74,10 @@ func TestEntryLess_SortByMacOS(t *testing.T) {
 	// Logical ordinal 1 maps to Mission Control ordinal 9 (e.g. primary
 	// display isn't leftmost), so SortByMacOS should order entryB before
 	// entryA even though entryA's logical ordinal is smaller.
-	entryA := Entry{Ordinal: 1, BundleID: testBundleA}
-	entryB := Entry{Ordinal: 2, BundleID: testBundleB}
+	entryA := Entry{Ordinal: ord(1), BundleID: testBundleA}
+	entryB := Entry{Ordinal: ord(2), BundleID: testBundleB}
 
-	mcOrdinal := stubMCOrdinal(map[int]int{1: 9, 2: 3})
+	mcOrdinal := stubMCOrdinal(map[space.Ordinal]int{ord(1): 9, ord(2): 3})
 
 	if entryLess(entryA, entryB, SortByMacOS, mcOrdinal) {
 		t.Fatalf(
@@ -86,14 +93,14 @@ func TestEntryLess_SortByMacOS(t *testing.T) {
 func TestEntryLess_TieBreakCascade(t *testing.T) {
 	t.Parallel()
 
-	mcOrdinal := stubMCOrdinal(map[int]int{4: 4})
+	mcOrdinal := stubMCOrdinal(map[space.Ordinal]int{ord(4): 4})
 
 	t.Run("same primary key falls back to Ordinal then BundleID then Title", func(t *testing.T) {
 		t.Parallel()
 
 		// Same Ordinal and BundleID: Title breaks the tie.
-		entryA := Entry{Ordinal: 4, BundleID: testBundleSame, Title: testTitleAlpha}
-		entryB := Entry{Ordinal: 4, BundleID: testBundleSame, Title: testTitleBeta}
+		entryA := Entry{Ordinal: ord(4), BundleID: testBundleSame, Title: testTitleAlpha}
+		entryB := Entry{Ordinal: ord(4), BundleID: testBundleSame, Title: testTitleBeta}
 
 		for _, key := range []SortKey{SortByLogical, SortByMacOS, SortByApp} {
 			if !entryLess(entryA, entryB, key, mcOrdinal) {
@@ -106,8 +113,8 @@ func TestEntryLess_TieBreakCascade(t *testing.T) {
 		t.Parallel()
 
 		// Equal BundleID for SortByApp: Ordinal breaks the tie next.
-		entryA := Entry{Ordinal: 1, BundleID: testBundleSame, Title: "Z"}
-		entryB := Entry{Ordinal: 2, BundleID: testBundleSame, Title: "A"}
+		entryA := Entry{Ordinal: ord(1), BundleID: testBundleSame, Title: "Z"}
+		entryB := Entry{Ordinal: ord(2), BundleID: testBundleSame, Title: "A"}
 
 		if !entryLess(entryA, entryB, SortByApp, mcOrdinal) {
 			t.Fatalf(
@@ -121,9 +128,9 @@ func TestSortEntries_SortByApp(t *testing.T) {
 	t.Parallel()
 
 	entries := []Entry{
-		{Ordinal: 1, BundleID: testBundleChrome, Title: "New Tab"},
-		{Ordinal: 3, BundleID: testBundleSafari, Title: "Page 2"},
-		{Ordinal: 2, BundleID: testBundleSafari, Title: "Page 1"},
+		{Ordinal: ord(1), BundleID: testBundleChrome, Title: "New Tab"},
+		{Ordinal: ord(3), BundleID: testBundleSafari, Title: "Page 2"},
+		{Ordinal: ord(2), BundleID: testBundleSafari, Title: "Page 1"},
 	}
 
 	SortEntries(entries, SortByApp)
@@ -136,9 +143,9 @@ func TestSortEntries_SortByApp(t *testing.T) {
 	}
 
 	// Within the same bundle ID, Ordinal breaks the tie (2 before 3).
-	if entries[0].Ordinal != 2 || entries[1].Ordinal != 3 {
+	if entries[0].Ordinal != ord(2) || entries[1].Ordinal != ord(3) {
 		t.Fatalf(
-			"SortEntries(SortByApp) Safari order = [%d, %d], want [2, 3]",
+			"SortEntries(SortByApp) Safari order = [%v, %v], want [2, 3]",
 			entries[0].Ordinal,
 			entries[1].Ordinal,
 		)
@@ -152,13 +159,13 @@ func TestSortPinRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		pins := []config.PinRule{
-			{BundleID: testBundleSafari, Title: "B", Ordinal: 3},
-			{BundleID: testBundleChrome, Title: "A", Ordinal: 1},
+			{BundleID: testBundleSafari, Title: "B", Ordinal: ord(3)},
+			{BundleID: testBundleChrome, Title: "A", Ordinal: ord(1)},
 		}
 
 		SortPinRules(pins, SortByLogical)
 
-		if pins[0].Ordinal != 1 || pins[1].Ordinal != 3 {
+		if pins[0].Ordinal != ord(1) || pins[1].Ordinal != ord(3) {
 			t.Fatalf("SortPinRules(SortByLogical) order = %+v, want Space 1 before Space 3", pins)
 		}
 	})
@@ -167,8 +174,8 @@ func TestSortPinRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		pins := []config.PinRule{
-			{BundleID: testBundleChrome, Title: "B", Ordinal: 1},
-			{BundleID: testBundleSafari, Title: "A", Ordinal: 9},
+			{BundleID: testBundleChrome, Title: "B", Ordinal: ord(1)},
+			{BundleID: testBundleSafari, Title: "A", Ordinal: ord(9)},
 		}
 
 		SortPinRules(pins, SortByApp)
@@ -186,10 +193,10 @@ func TestSortPinRules_AllKeys(t *testing.T) {
 	t.Run("macos orders by resolved Mission Control ordinal", func(t *testing.T) {
 		t.Parallel()
 
-		ruleA := config.PinRule{BundleID: testBundleA, Ordinal: 1}
-		ruleB := config.PinRule{BundleID: testBundleB, Ordinal: 2}
+		ruleA := config.PinRule{BundleID: testBundleA, Ordinal: ord(1)}
+		ruleB := config.PinRule{BundleID: testBundleB, Ordinal: ord(2)}
 
-		mcOrdinal := stubMCOrdinal(map[int]int{1: 9, 2: 3})
+		mcOrdinal := stubMCOrdinal(map[space.Ordinal]int{ord(1): 9, ord(2): 3})
 
 		if pinRuleLess(ruleA, ruleB, SortByMacOS, mcOrdinal) {
 			t.Fatalf(
@@ -208,8 +215,8 @@ func TestSortPinRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		pins := []config.PinRule{
-			{BundleID: testBundleSame, Title: testTitleBeta, Ordinal: 4},
-			{BundleID: testBundleSame, Title: testTitleAlpha, Ordinal: 4},
+			{BundleID: testBundleSame, Title: testTitleBeta, Ordinal: ord(4)},
+			{BundleID: testBundleSame, Title: testTitleAlpha, Ordinal: ord(4)},
 		}
 
 		SortPinRules(pins, SortByLogical)
@@ -227,13 +234,13 @@ func TestSortDefaultSpaceRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		rules := []config.DefaultSpaceRule{
-			{BundleID: testBundleSafari, Ordinal: 3},
-			{BundleID: testBundleChrome, Ordinal: 1},
+			{BundleID: testBundleSafari, Ordinal: ord(3)},
+			{BundleID: testBundleChrome, Ordinal: ord(1)},
 		}
 
 		SortDefaultSpaceRules(rules, SortByLogical)
 
-		if rules[0].Ordinal != 1 || rules[1].Ordinal != 3 {
+		if rules[0].Ordinal != ord(1) || rules[1].Ordinal != ord(3) {
 			t.Fatalf(
 				"SortDefaultSpaceRules(SortByLogical) order = %+v, want Space 1 before Space 3",
 				rules,
@@ -245,8 +252,8 @@ func TestSortDefaultSpaceRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		rules := []config.DefaultSpaceRule{
-			{BundleID: testBundleChrome, Ordinal: 1},
-			{BundleID: testBundleSafari, Ordinal: 9},
+			{BundleID: testBundleChrome, Ordinal: ord(1)},
+			{BundleID: testBundleSafari, Ordinal: ord(9)},
 		}
 
 		SortDefaultSpaceRules(rules, SortByApp)
@@ -264,10 +271,10 @@ func TestSortDefaultSpaceRules_AllKeys(t *testing.T) {
 	t.Run("macos orders by resolved Mission Control ordinal", func(t *testing.T) {
 		t.Parallel()
 
-		ruleA := config.DefaultSpaceRule{BundleID: testBundleA, Ordinal: 1}
-		ruleB := config.DefaultSpaceRule{BundleID: testBundleB, Ordinal: 2}
+		ruleA := config.DefaultSpaceRule{BundleID: testBundleA, Ordinal: ord(1)}
+		ruleB := config.DefaultSpaceRule{BundleID: testBundleB, Ordinal: ord(2)}
 
-		mcOrdinal := stubMCOrdinal(map[int]int{1: 9, 2: 3})
+		mcOrdinal := stubMCOrdinal(map[space.Ordinal]int{ord(1): 9, ord(2): 3})
 
 		if defaultSpaceRuleLess(ruleA, ruleB, SortByMacOS, mcOrdinal) {
 			t.Fatalf(
@@ -286,8 +293,8 @@ func TestSortDefaultSpaceRules_AllKeys(t *testing.T) {
 		t.Parallel()
 
 		rules := []config.DefaultSpaceRule{
-			{BundleID: testBundleChrome, Ordinal: 4},
-			{BundleID: testBundleSafari, Ordinal: 4},
+			{BundleID: testBundleChrome, Ordinal: ord(4)},
+			{BundleID: testBundleSafari, Ordinal: ord(4)},
 		}
 
 		SortDefaultSpaceRules(rules, SortByLogical)
@@ -348,7 +355,7 @@ func TestParseSortKey_RejectsOldDisplayValue(t *testing.T) {
 // against whatever display/Space arrangement is live on the machine
 // running the test, mirroring internal/space's own self-consistency tests
 // (e.g. TestMissionControlIndexForSpace_SelfConsistent). It builds one
-// synthetic Entry per currently valid logical ordinal, sorts them by
+// synthetic Entry per currently valid logical Ordinal, sorts them by
 // SortByMacOS, and checks the result is non-decreasing by each entry's
 // live-resolved Mission Control ordinal — i.e. that SortEntries actually
 // used the real native lookup rather than, say, silently falling back to
@@ -357,18 +364,20 @@ func TestParseSortKey_RejectsOldDisplayValue(t *testing.T) {
 func TestSortEntries_SortByMacOS_LiveSelfConsistent(t *testing.T) {
 	t.Parallel()
 
-	total := space.LogicalCount()
-	if total == 0 {
+	counts := space.LeftToRightSpaceCounts()
+	if len(counts) == 0 {
 		t.Skip("no displays reported; skipping on headless environment")
 	}
 
-	entries := make([]Entry, total)
-	for i := range total {
-		logicalOrdinal := i + 1
-		entries[i] = Entry{
-			Ordinal:  logicalOrdinal,
-			BundleID: "com.example.synthetic",
-			Title:    "synthetic",
+	var entries []Entry
+
+	for displayIdx, spaceCount := range counts {
+		for spaceIdx := 1; spaceIdx <= spaceCount; spaceIdx++ {
+			entries = append(entries, Entry{
+				Ordinal:  space.Ordinal{Display: displayIdx + 1, Space: spaceIdx},
+				BundleID: "com.example.synthetic",
+				Title:    "synthetic",
+			})
 		}
 	}
 
@@ -377,19 +386,18 @@ func TestSortEntries_SortByMacOS_LiveSelfConsistent(t *testing.T) {
 	prevMCIndex := -1
 
 	for _, entry := range entries {
-		sid := space.LogicalSpaceID(entry.Ordinal)
+		sid := space.IDForOrdinal(entry.Ordinal)
 		if sid == 0 {
 			t.Fatalf(
-				"LogicalSpaceID(%d) = 0, want a non-zero Space ID (total=%d)",
+				"IDForOrdinal(%v) = 0, want a non-zero Space ID",
 				entry.Ordinal,
-				total,
 			)
 		}
 
 		mcIndex := space.MissionControlIndexForSpace(sid)
 		if mcIndex == 0 {
 			t.Fatalf(
-				"MissionControlIndexForSpace(%d) = 0 for logical ordinal %d, want non-zero",
+				"MissionControlIndexForSpace(%d) = 0 for logical ordinal %v, want non-zero",
 				sid,
 				entry.Ordinal,
 			)

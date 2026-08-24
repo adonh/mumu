@@ -49,7 +49,7 @@ func ParseSortKey(raw string) (SortKey, error) {
 // given key. mcOrdinal resolves an entry's logical Ordinal to its current
 // macOS Mission Control ordinal (only consulted for SortByMacOS), letting
 // callers memoize the underlying native lookups across a whole sort.
-func entryLess(entryA, entryB Entry, key SortKey, mcOrdinal func(int) int) bool {
+func entryLess(entryA, entryB Entry, key SortKey, mcOrdinal func(space.Ordinal) int) bool {
 	switch key {
 	case SortByMacOS:
 		if mcA, mcB := mcOrdinal(entryA.Ordinal), mcOrdinal(entryB.Ordinal); mcA != mcB {
@@ -65,7 +65,7 @@ func entryLess(entryA, entryB Entry, key SortKey, mcOrdinal func(int) int) bool 
 	}
 
 	if entryA.Ordinal != entryB.Ordinal {
-		return entryA.Ordinal < entryB.Ordinal
+		return entryA.Ordinal.Less(entryB.Ordinal)
 	}
 
 	if entryA.BundleID != entryB.BundleID {
@@ -76,23 +76,23 @@ func entryLess(entryA, entryB Entry, key SortKey, mcOrdinal func(int) int) bool 
 }
 
 // newMissionControlOrdinalLookup returns a function resolving a logical
-// Space ordinal to its current macOS Mission Control ordinal, memoizing
+// Space Ordinal to its current macOS Mission Control ordinal, memoizing
 // results across calls so a single sort's repeated comparisons don't
 // repeat native lookups for entries sharing the same saved Space.
-func newMissionControlOrdinalLookup() func(int) int {
-	cache := map[int]int{}
+func newMissionControlOrdinalLookup() func(space.Ordinal) int {
+	cache := map[space.Ordinal]int{}
 
-	return func(logicalOrdinal int) int {
-		if mcIndex, ok := cache[logicalOrdinal]; ok {
+	return func(ordinal space.Ordinal) int {
+		if mcIndex, ok := cache[ordinal]; ok {
 			return mcIndex
 		}
 
 		mcIndex := 0
-		if sid := space.LogicalSpaceID(logicalOrdinal); sid != 0 {
+		if sid := space.IDForOrdinal(ordinal); sid != 0 {
 			mcIndex = space.MissionControlIndexForSpace(sid)
 		}
 
-		cache[logicalOrdinal] = mcIndex
+		cache[ordinal] = mcIndex
 
 		return mcIndex
 	}
@@ -121,7 +121,7 @@ func SortSkippedEntries(entries []SkippedEntry, key SortKey) {
 // pinRuleLess reports whether ruleA should sort before ruleB for the given
 // key, using the same cascade as entryLess (Space ordinal, then bundle
 // identifier, then title).
-func pinRuleLess(ruleA, ruleB config.PinRule, key SortKey, mcOrdinal func(int) int) bool {
+func pinRuleLess(ruleA, ruleB config.PinRule, key SortKey, mcOrdinal func(space.Ordinal) int) bool {
 	switch key {
 	case SortByMacOS:
 		if mcA, mcB := mcOrdinal(ruleA.Ordinal), mcOrdinal(ruleB.Ordinal); mcA != mcB {
@@ -137,7 +137,7 @@ func pinRuleLess(ruleA, ruleB config.PinRule, key SortKey, mcOrdinal func(int) i
 	}
 
 	if ruleA.Ordinal != ruleB.Ordinal {
-		return ruleA.Ordinal < ruleB.Ordinal
+		return ruleA.Ordinal.Less(ruleB.Ordinal)
 	}
 
 	if ruleA.BundleID != ruleB.BundleID {
@@ -153,7 +153,7 @@ func pinRuleLess(ruleA, ruleB config.PinRule, key SortKey, mcOrdinal func(int) i
 func defaultSpaceRuleLess(
 	ruleA, ruleB config.DefaultSpaceRule,
 	key SortKey,
-	mcOrdinal func(int) int,
+	mcOrdinal func(space.Ordinal) int,
 ) bool {
 	switch key {
 	case SortByMacOS:
@@ -170,7 +170,7 @@ func defaultSpaceRuleLess(
 	}
 
 	if ruleA.Ordinal != ruleB.Ordinal {
-		return ruleA.Ordinal < ruleB.Ordinal
+		return ruleA.Ordinal.Less(ruleB.Ordinal)
 	}
 
 	return ruleA.BundleID < ruleB.BundleID

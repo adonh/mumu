@@ -64,8 +64,8 @@ func Capture(progress ProgressFunc) (*Layout, CaptureSummary, error) {
 			continue
 		}
 
-		ordinal := space.LogicalIndexForSpace(entry.SpaceID)
-		if ordinal == 0 {
+		ordinal := space.OrdinalForSpace(entry.SpaceID)
+		if ordinal == (space.Ordinal{}) {
 			// Defensive: the native enumeration only returns resolved
 			// windows, but skip rather than record a bogus ordinal.
 			continue

@@ -1,9 +1,16 @@
 package layout
 
-import "time"
+import (
+	"time"
 
-// SchemaVersion is the current on-disk layout schema version.
-const SchemaVersion = 1
+	"github.com/adonh/mumu/internal/space"
+)
+
+// SchemaVersion is the current on-disk layout schema version. Bumped
+// whenever the persisted JSON shape changes incompatibly (most recently:
+// Entry.Ordinal changed from a flat number to a {"display","space"}
+// object) — see persist.go's pre-parse version check.
+const SchemaVersion = 2
 
 // Entry represents a single window's saved space assignment.
 type Entry struct {
@@ -16,10 +23,10 @@ type Entry struct {
 	// Used as the restore-time matching fallback when title matching is
 	// ambiguous or unavailable.
 	Index int `json:"index"`
-	// Ordinal is the window's logical left-to-right Mission Control space
-	// number (see internal/space's logical numbering), independent of which
-	// display is primary.
-	Ordinal int `json:"ordinal"`
+	// Ordinal is the window's logical two-part (display, space-within-display)
+	// ordinal (see internal/space's logical numbering), independent of
+	// which display is primary.
+	Ordinal space.Ordinal `json:"ordinal"`
 }
 
 // Layout is a saved window-to-space arrangement for a specific display count,
