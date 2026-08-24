@@ -87,7 +87,7 @@ type moveTarget struct {
 }
 
 type fallbackTarget struct {
-	ordinal int
+	ordinal space.Ordinal
 	sid     uint64
 }
 
@@ -197,16 +197,16 @@ func Restore(
 			pinsByBundle,
 			pinLiveByBundle,
 			map[string]map[int]bool{},
-			space.LogicalCount(),
-			space.LogicalSpaceID,
+			space.LeftToRightSpaceCounts(),
+			space.IDForOrdinal,
 		)
 	} else {
 		pinMoves, pinSkipped, _ = planDirectMoves(
 			pinsByBundle,
 			liveByBundle,
 			map[string]map[int]bool{},
-			space.LogicalCount(),
-			space.LogicalSpaceID,
+			space.LeftToRightSpaceCounts(),
+			space.IDForOrdinal,
 		)
 
 		claimed := claimedWindowIDs(pinMoves)
@@ -306,7 +306,7 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 func planLayoutPhase(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
-	defaultSpaces map[string]int,
+	defaultSpaces map[string]space.Ordinal,
 ) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
 	usedIndex := map[string]map[int]bool{}
 
@@ -314,8 +314,8 @@ func planLayoutPhase(
 		entriesByBundle,
 		liveByBundle,
 		usedIndex,
-		space.LogicalCount(),
-		space.LogicalSpaceID,
+		space.LeftToRightSpaceCounts(),
+		space.IDForOrdinal,
 	)
 
 	fallback, fallbackSkipped := planFallbackMoves(
@@ -324,10 +324,26 @@ func planLayoutPhase(
 		validAssignmentOrdinals,
 		defaultSpaces,
 		primaryDisplayFallbackTarget,
-		space.LogicalSpaceID,
+		space.IDForOrdinal,
 	)
 
 	return direct, directSkipped, fallback, fallbackSkipped
+}
+
+// ordinalInBounds reports whether ordinal's display part is within the
+// currently connected display count, and its space-within-display part is
+// within that specific display's own current Space count — bounds
+// checking done entirely independently per display, so a Space added or
+// removed on one display never affects whether an ordinal on a different
+// display is considered in range.
+func ordinalInBounds(ordinal space.Ordinal, spaceCounts []int) bool {
+	if ordinal.Display < 1 || ordinal.Display > len(spaceCounts) {
+		return false
+	}
+
+	spaceCount := spaceCounts[ordinal.Display-1]
+
+	return ordinal.Space >= 1 && ordinal.Space <= spaceCount
 }
 
 // planDirectMoves batch-matches each application's saved entries against
@@ -337,14 +353,16 @@ func planLayoutPhase(
 // ID, so planFallbackMoves can later see exactly which windows remain
 // unclaimed. The returned map records, per bundle ID, the logical
 // ordinals of every valid assignment, for planFallbackMoves to pick a
-// prevalent fallback target from.
+// prevalent fallback target from. spaceCounts is the current per-display
+// Space-count sequence (left to right), used to bounds-check each entry's
+// ordinal independently per display.
 func planDirectMoves(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedIndex map[string]map[int]bool,
-	currentSpaceCount int,
-	logicalSpaceID func(int) uint64,
-) ([]moveTarget, []SkippedEntry, map[string][]int) {
+	spaceCounts []int,
+	spaceIDForOrdinal func(space.Ordinal) uint64,
+) ([]moveTarget, []SkippedEntry, map[string][]space.Ordinal) {
 	bundleIDs := make([]string, 0, len(entriesByBundle))
 	for bundleID := range entriesByBundle {
 		bundleIDs = append(bundleIDs, bundleID)
@@ -357,7 +375,7 @@ func planDirectMoves(
 		skipped []SkippedEntry
 	)
 
-	validAssignmentOrdinals := map[string][]int{}
+	validAssignmentOrdinals := map[string][]space.Ordinal{}
 
 	for _, bundleID := range bundleIDs {
 		entries := entriesByBundle[bundleID]
@@ -395,7 +413,7 @@ func planDirectMoves(
 
 			used[matchIdx] = true
 
-			if entry.Ordinal < 1 || entry.Ordinal > currentSpaceCount {
+			if !ordinalInBounds(entry.Ordinal, spaceCounts) {
 				skipped = append(
 					skipped,
 					SkippedEntry{Entry: entry, Reason: SkipOrdinalOutOfRange},
@@ -404,7 +422,7 @@ func planDirectMoves(
 				continue
 			}
 
-			sid := logicalSpaceID(entry.Ordinal)
+			sid := spaceIDForOrdinal(entry.Ordinal)
 			if sid == 0 {
 				skipped = append(
 					skipped,
@@ -436,10 +454,10 @@ func planDirectMoves(
 func planFallbackMoves(
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedByBundle map[string]map[int]bool,
-	assignmentOrdinals map[string][]int,
-	defaultSpaces map[string]int,
+	assignmentOrdinals map[string][]space.Ordinal,
+	defaultSpaces map[string]space.Ordinal,
 	primaryDisplayTarget func() (fallbackTarget, error),
-	logicalSpaceID func(int) uint64,
+	spaceIDForOrdinal func(space.Ordinal) uint64,
 ) ([]moveTarget, []SkippedEntry) {
 	bundleIDs := fallbackBundleIDs(assignmentOrdinals, defaultSpaces)
 
@@ -480,7 +498,7 @@ func planFallbackMoves(
 		}
 
 		if err == nil && target.sid == 0 {
-			target.sid = logicalSpaceID(target.ordinal)
+			target.sid = spaceIDForOrdinal(target.ordinal)
 			if target.sid == 0 {
 				err = derrors.New(
 					derrors.CodeActionFailed,
@@ -536,7 +554,10 @@ func planFallbackMoves(
 // valid saved-entry assignment this restore or a configured default_spaces
 // rule, so planFallbackMoves considers a bundle ID with a configured
 // default even when it has zero valid assignments.
-func fallbackBundleIDs(assignmentOrdinals map[string][]int, defaultSpaces map[string]int) []string {
+func fallbackBundleIDs(
+	assignmentOrdinals map[string][]space.Ordinal,
+	defaultSpaces map[string]space.Ordinal,
+) []string {
 	seen := make(map[string]bool, len(assignmentOrdinals)+len(defaultSpaces))
 	bundleIDs := make([]string, 0, len(assignmentOrdinals)+len(defaultSpaces))
 
@@ -571,16 +592,18 @@ func primaryDisplayFallbackTarget() (fallbackTarget, error) {
 }
 
 func fallbackTargetForAssignments(
-	assignmentOrdinals []int,
+	assignmentOrdinals []space.Ordinal,
 	primaryDisplayTarget func() (fallbackTarget, error),
 ) (fallbackTarget, bool, error) {
 	if len(assignmentOrdinals) == 0 {
 		return fallbackTarget{}, false, nil
 	}
 
-	counts := map[int]int{}
+	counts := map[space.Ordinal]int{}
 	maxCount := 0
-	ordinal := 0
+
+	var ordinal space.Ordinal
+
 	tied := false
 
 	for _, candidate := range assignmentOrdinals {
@@ -605,7 +628,7 @@ func fallbackTargetForAssignments(
 		return fallbackTarget{}, true, err
 	}
 
-	if target.ordinal < 1 || target.sid == 0 {
+	if target.ordinal == (space.Ordinal{}) || target.sid == 0 {
 		return fallbackTarget{}, true, derrors.New(
 			derrors.CodeActionFailed,
 			"failed to resolve the primary display's current space",

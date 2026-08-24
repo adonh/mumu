@@ -353,35 +353,27 @@ static CFArrayRef mumuCopyDisplaySpacesSortedLeftToRight(void) {
 	return sorted;
 }
 
-#pragma mark - Public Logical (Left-to-Right) Space Numbering API
+#pragma mark - Public Logical (Two-Part Display + Space) Numbering API
 
-/// Total number of Spaces, counted in logical left-to-right order.
-int MumuLogicalSpaceCount(void) {
+/// Number of connected displays, in left-to-right order.
+int MumuLogicalDisplayCount(void) {
 	@autoreleasepool {
 		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return 0;
 		}
 
-		int total = 0;
-		CFIndex displayCount = CFArrayGetCount(sorted);
-		for (CFIndex i = 0; i < displayCount; i++) {
-			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
-			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
-			if (spacesRef) {
-				total += (int)CFArrayGetCount(spacesRef);
-			}
-		}
-
+		int count = (int)CFArrayGetCount(sorted);
 		CFRelease(sorted);
 
-		return total;
+		return count;
 	}
 }
 
-/// The macOS Space ID at the given 1-based logical left-to-right index.
-uint64_t MumuLogicalSpaceID(int logicalIndex) {
-	if (logicalIndex < 1) {
+/// The macOS Space ID at the given 1-based logical (display, space)
+/// ordinal pair.
+uint64_t MumuOrdinalSpaceID(int displayOrdinal, int spaceOrdinal) {
+	if (displayOrdinal < 1 || spaceOrdinal < 1) {
 		return 0;
 	}
 
@@ -390,51 +382,45 @@ uint64_t MumuLogicalSpaceID(int logicalIndex) {
 		if (!sorted) {
 			return 0;
 		}
+
+		CFIndex displayCount = CFArrayGetCount(sorted);
+		if (displayOrdinal > displayCount) {
+			CFRelease(sorted);
+
+			return 0;
+		}
+
+		CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, displayOrdinal - 1);
+		CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
 
 		uint64_t result = 0;
-		int counter = 1;
 
-		CFIndex displayCount = CFArrayGetCount(sorted);
-		for (CFIndex i = 0; i < displayCount; i++) {
-			CFDictionaryRef displayRef = (CFDictionaryRef)CFArrayGetValueAtIndex(sorted, i);
-			CFArrayRef spacesRef = (CFArrayRef)CFDictionaryGetValue(displayRef, CFSTR("Spaces"));
-			if (!spacesRef) {
-				continue;
-			}
-
-			CFIndex spacesCount = CFArrayGetCount(spacesRef);
-			for (CFIndex j = 0; j < spacesCount; j++) {
-				if (counter == logicalIndex) {
-					CFDictionaryRef spaceRef = (CFDictionaryRef)CFArrayGetValueAtIndex(spacesRef, j);
-					CFNumberRef sidRef = (CFNumberRef)CFDictionaryGetValue(spaceRef, CFSTR("id64"));
-					if (sidRef) {
-						CFNumberGetValue(sidRef, CFNumberGetType(sidRef), &result);
-					}
-
-					CFRelease(sorted);
-
-					return result;
-				}
-
-				counter++;
+		if (spacesRef && spaceOrdinal <= CFArrayGetCount(spacesRef)) {
+			CFDictionaryRef spaceRef = (CFDictionaryRef)CFArrayGetValueAtIndex(spacesRef, spaceOrdinal - 1);
+			CFNumberRef sidRef = (CFNumberRef)CFDictionaryGetValue(spaceRef, CFSTR("id64"));
+			if (sidRef) {
+				CFNumberGetValue(sidRef, CFNumberGetType(sidRef), &result);
 			}
 		}
 
 		CFRelease(sorted);
 
-		return 0;
+		return result;
 	}
 }
 
-/// The 1-based logical left-to-right index for a given macOS Space ID.
-int MumuLogicalIndexForSpace(uint64_t sid) {
+/// Resolves a macOS Space ID to its 1-based logical display ordinal and
+/// 1-based logical space-within-display ordinal.
+int MumuSpaceOrdinal(uint64_t sid, int *outDisplay, int *outSpace) {
+	if (!outDisplay || !outSpace) {
+		return 0;
+	}
+
 	@autoreleasepool {
 		CFArrayRef sorted = mumuCopyDisplaySpacesSortedLeftToRight();
 		if (!sorted) {
 			return 0;
 		}
-
-		int counter = 1;
 
 		CFIndex displayCount = CFArrayGetCount(sorted);
 		for (CFIndex i = 0; i < displayCount; i++) {
@@ -455,12 +441,13 @@ int MumuLogicalIndexForSpace(uint64_t sid) {
 				}
 
 				if (curSid == sid) {
+					*outDisplay = (int)(i + 1);
+					*outSpace = (int)(j + 1);
+
 					CFRelease(sorted);
 
-					return counter;
+					return 1;
 				}
-
-				counter++;
 			}
 		}
 

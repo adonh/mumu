@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/adonh/mumu/internal/config"
+	"github.com/adonh/mumu/internal/space"
 )
 
 const defaultSpacesTestSlackBundle = "com.example.slack"
@@ -12,15 +13,15 @@ func TestDefaultSpacesByBundle_Converts(t *testing.T) {
 	t.Parallel()
 
 	rules := []config.DefaultSpaceRule{
-		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 1},
-		{BundleID: "com.example.chrome", Ordinal: 5},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: ord(1)},
+		{BundleID: "com.example.chrome", Ordinal: ord(5)},
 	}
 
 	got := defaultSpacesByBundle(rules)
 
-	want := map[string]int{
-		defaultSpacesTestSlackBundle: 1,
-		"com.example.chrome":         5,
+	want := map[string]space.Ordinal{
+		defaultSpacesTestSlackBundle: ord(1),
+		"com.example.chrome":         ord(5),
 	}
 
 	if len(got) != len(want) {
@@ -29,7 +30,7 @@ func TestDefaultSpacesByBundle_Converts(t *testing.T) {
 
 	for bundleID, ordinal := range want {
 		if got[bundleID] != ordinal {
-			t.Fatalf("defaultSpacesByBundle()[%q] = %d, want %d", bundleID, got[bundleID], ordinal)
+			t.Fatalf("defaultSpacesByBundle()[%q] = %v, want %v", bundleID, got[bundleID], ordinal)
 		}
 	}
 }
@@ -38,15 +39,15 @@ func TestDefaultSpacesByBundle_DuplicateBundleIDLastWins(t *testing.T) {
 	t.Parallel()
 
 	rules := []config.DefaultSpaceRule{
-		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 1},
-		{BundleID: defaultSpacesTestSlackBundle, Ordinal: 3},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: ord(1)},
+		{BundleID: defaultSpacesTestSlackBundle, Ordinal: ord(3)},
 	}
 
 	got := defaultSpacesByBundle(rules)
 
-	if got[defaultSpacesTestSlackBundle] != 3 {
+	if got[defaultSpacesTestSlackBundle] != ord(3) {
 		t.Fatalf(
-			"defaultSpacesByBundle()[slack] = %d, want 3 (last rule wins)",
+			"defaultSpacesByBundle()[slack] = %v, want 3 (last rule wins)",
 			got[defaultSpacesTestSlackBundle],
 		)
 	}

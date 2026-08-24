@@ -10,6 +10,7 @@ import (
 
 	"github.com/adonh/mumu/internal/config"
 	"github.com/adonh/mumu/internal/layout"
+	"github.com/adonh/mumu/internal/space"
 )
 
 const (
@@ -219,7 +220,7 @@ func TestPrintRestoreSummaryMarksFallbackFailures(t *testing.T) {
 					Entry: layout.Entry{
 						BundleID: "com.example.chrome",
 						Title:    "window",
-						Ordinal:  1,
+						Ordinal:  space.Ordinal{Display: 1, Space: 1},
 					},
 					Reason:   layout.SkipMoveFailed,
 					Fallback: true,
@@ -250,7 +251,7 @@ func TestPrintRestoreSummaryMarksFuzzyMatches(t *testing.T) {
 					Entry: layout.Entry{
 						BundleID: "com.example.chrome",
 						Title:    "window",
-						Ordinal:  1,
+						Ordinal:  space.Ordinal{Display: 1, Space: 1},
 					},
 					Reason: layout.SkipMoveFailed,
 					Fuzzy:  true,
@@ -302,7 +303,11 @@ func TestPrintConfiguredPins_UsesSharedCounterWidth(t *testing.T) {
 	// double-digit total, even though this pins list itself only has a
 	// single-digit total.
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+		{
+			BundleID: testSlackBundleID,
+			Title:    testTitleGeneral,
+			Ordinal:  space.Ordinal{Display: 1, Space: 1},
+		},
 	}, layout.SortByLogical, 2)
 
 	got := output.String()
@@ -323,7 +328,7 @@ func TestPrintConfiguredDefaultSpaces_UsesSharedCounterWidth(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
-		{BundleID: testSlackBundleID, Ordinal: 1},
+		{BundleID: testSlackBundleID, Ordinal: space.Ordinal{Display: 1, Space: 1}},
 	}, layout.SortByLogical, 2)
 
 	got := output.String()
@@ -344,7 +349,11 @@ func TestPrintConfiguredPins_ListsEachRule(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
+		{
+			BundleID: testSlackBundleID,
+			Title:    testTitleGeneral,
+			Ordinal:  space.Ordinal{Display: 1, Space: 1},
+		},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()
@@ -364,8 +373,16 @@ func TestPrintConfiguredPins_CountersAreSequential(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
-		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 2},
+		{
+			BundleID: testSlackBundleID,
+			Title:    testTitleGeneral,
+			Ordinal:  space.Ordinal{Display: 1, Space: 1},
+		},
+		{
+			BundleID: testBundleChrome,
+			Title:    testTitleChrome,
+			Ordinal:  space.Ordinal{Display: 1, Space: 2},
+		},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()
@@ -386,8 +403,16 @@ func TestPrintConfiguredPins_SortedByKey(t *testing.T) {
 
 	// Scrambled config-file order: Space 5 listed before Space 2.
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 5},
-		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 2},
+		{
+			BundleID: testBundleChrome,
+			Title:    testTitleChrome,
+			Ordinal:  space.Ordinal{Display: 1, Space: 5},
+		},
+		{
+			BundleID: testSlackBundleID,
+			Title:    testTitleGeneral,
+			Ordinal:  space.Ordinal{Display: 1, Space: 2},
+		},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()
@@ -420,8 +445,16 @@ func TestPrintConfiguredPins_SortedByAppKey(t *testing.T) {
 	// a lower Space than Chrome, so only a bundle-identifier sort proves
 	// "--sort app" is actually applied rather than falling back to Space.
 	printConfiguredPins(cmd, []config.PinRule{
-		{BundleID: testSlackBundleID, Title: testTitleGeneral, Ordinal: 1},
-		{BundleID: testBundleChrome, Title: testTitleChrome, Ordinal: 9},
+		{
+			BundleID: testSlackBundleID,
+			Title:    testTitleGeneral,
+			Ordinal:  space.Ordinal{Display: 1, Space: 1},
+		},
+		{
+			BundleID: testBundleChrome,
+			Title:    testTitleChrome,
+			Ordinal:  space.Ordinal{Display: 1, Space: 9},
+		},
 	}, layout.SortByApp, 1)
 
 	got := output.String()
@@ -451,7 +484,7 @@ func TestPrintConfiguredDefaultSpaces_ListsEachRule(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
-		{BundleID: testSlackBundleID, Ordinal: 1},
+		{BundleID: testSlackBundleID, Ordinal: space.Ordinal{Display: 1, Space: 1}},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()
@@ -471,8 +504,8 @@ func TestPrintConfiguredDefaultSpaces_CountersAreSequential(t *testing.T) {
 	cmd.SetOut(&output)
 
 	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
-		{BundleID: testSlackBundleID, Ordinal: 1},
-		{BundleID: testBundleChrome, Ordinal: 2},
+		{BundleID: testSlackBundleID, Ordinal: space.Ordinal{Display: 1, Space: 1}},
+		{BundleID: testBundleChrome, Ordinal: space.Ordinal{Display: 1, Space: 2}},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()
@@ -493,8 +526,8 @@ func TestPrintConfiguredDefaultSpaces_SortedByKey(t *testing.T) {
 
 	// Scrambled config-file order: Space 5 listed before Space 2.
 	printConfiguredDefaultSpaces(cmd, []config.DefaultSpaceRule{
-		{BundleID: testBundleChrome, Ordinal: 5},
-		{BundleID: testSlackBundleID, Ordinal: 2},
+		{BundleID: testBundleChrome, Ordinal: space.Ordinal{Display: 1, Space: 5}},
+		{BundleID: testSlackBundleID, Ordinal: space.Ordinal{Display: 1, Space: 2}},
 	}, layout.SortByLogical, 1)
 
 	got := output.String()

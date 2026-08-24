@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/adonh/mumu/internal/space"
 	"github.com/adonh/mumu/internal/window"
 )
 
@@ -13,6 +14,13 @@ var errPrimarySpaceUnavailable = errors.New("primary space unavailable")
 
 func fallbackLiveEntry(windowID uint32, title string) window.AcrossSpacesEntry {
 	return window.AcrossSpacesEntry{WindowID: windowID, Title: title}
+}
+
+// identityIDForOrdinal resolves a single-display test Ordinal to a
+// space ID numerically equal to its Space part, mirroring how these
+// tests previously used a flat ordinal directly as its own space ID.
+func identityIDForOrdinal(ordinal space.Ordinal) uint64 {
+	return uint64(ordinal.Space)
 }
 
 func TestPlanFallbackMoves(t *testing.T) {
@@ -31,23 +39,23 @@ func TestPlanFallbackMoves(t *testing.T) {
 		usedByBundle := map[string]map[int]bool{
 			fallbackTestBundle: {0: true},
 		}
-		assignmentOrdinals := map[string][]int{
-			fallbackTestBundle: {4, 4, 7},
+		assignmentOrdinals := map[string][]space.Ordinal{
+			fallbackTestBundle: {ord(4), ord(4), ord(7)},
 		}
 
 		targets, skipped := planFallbackMoves(
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			map[string]int{},
+			map[string]space.Ordinal{},
 			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run for a unique target")
 
 				return fallbackTarget{}, nil
 			},
-			func(ordinal int) uint64 {
-				if ordinal != 4 {
-					t.Fatalf("fallback ordinal = %d, want 4", ordinal)
+			func(ordinal space.Ordinal) uint64 {
+				if ordinal != ord(4) {
+					t.Fatalf("fallback ordinal = %v, want %v", ordinal, ord(4))
 				}
 
 				return 104
@@ -71,8 +79,8 @@ func TestPlanFallbackMoves(t *testing.T) {
 				t.Fatalf("fallback space ID = %d, want 104", target.sid)
 			}
 
-			if target.entry.Ordinal != 4 {
-				t.Fatalf("fallback ordinal = %d, want 4", target.entry.Ordinal)
+			if target.entry.Ordinal != ord(4) {
+				t.Fatalf("fallback ordinal = %v, want %v", target.entry.Ordinal, ord(4))
 			}
 		}
 
@@ -96,19 +104,19 @@ func TestPlanFallbackMoves(t *testing.T) {
 		usedByBundle := map[string]map[int]bool{
 			fallbackTestBundle: {0: true},
 		}
-		assignmentOrdinals := map[string][]int{
-			fallbackTestBundle: {2, 5},
+		assignmentOrdinals := map[string][]space.Ordinal{
+			fallbackTestBundle: {ord(2), ord(5)},
 		}
 
 		targets, skipped := planFallbackMoves(
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			map[string]int{},
+			map[string]space.Ordinal{},
 			func() (fallbackTarget, error) {
-				return fallbackTarget{ordinal: 7, sid: 107}, nil
+				return fallbackTarget{ordinal: ord(7), sid: 107}, nil
 			},
-			func(int) uint64 {
+			func(space.Ordinal) uint64 {
 				t.Fatal("tied fallback must use the primary display's resolved space ID")
 
 				return 0
@@ -123,7 +131,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			t.Fatalf("fallback targets = %d, want 1", len(targets))
 		}
 
-		if targets[0].entry.Ordinal != 7 || targets[0].sid != 107 {
+		if targets[0].entry.Ordinal != ord(7) || targets[0].sid != 107 {
 			t.Fatalf("fallback target = %#v, want primary ordinal 7 / space ID 107", targets[0])
 		}
 	})
@@ -140,19 +148,19 @@ func TestPlanFallbackMoves(t *testing.T) {
 		usedByBundle := map[string]map[int]bool{
 			fallbackTestBundle: {0: true},
 		}
-		assignmentOrdinals := map[string][]int{
-			fallbackTestBundle: {2, 5},
+		assignmentOrdinals := map[string][]space.Ordinal{
+			fallbackTestBundle: {ord(2), ord(5)},
 		}
 
 		targets, skipped := planFallbackMoves(
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
-			map[string]int{},
+			map[string]space.Ordinal{},
 			func() (fallbackTarget, error) {
 				return fallbackTarget{}, errPrimarySpaceUnavailable
 			},
-			func(int) uint64 {
+			func(space.Ordinal) uint64 {
 				t.Fatal("logical space lookup must not run after primary target resolution fails")
 
 				return 0
@@ -192,14 +200,14 @@ func TestPlanFallbackMoves(t *testing.T) {
 		targets, skipped := planFallbackMoves(
 			liveByBundle,
 			usedByBundle,
-			map[string][]int{},
-			map[string]int{},
+			map[string][]space.Ordinal{},
+			map[string]space.Ordinal{},
 			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run without valid assignments")
 
 				return fallbackTarget{}, nil
 			},
-			func(int) uint64 {
+			func(space.Ordinal) uint64 {
 				t.Fatal("logical space lookup must not run without valid assignments")
 
 				return 0
@@ -230,11 +238,11 @@ func TestPlanFallbackMoves(t *testing.T) {
 		usedByBundle := map[string]map[int]bool{
 			fallbackTestBundle: {0: true},
 		}
-		assignmentOrdinals := map[string][]int{
-			fallbackTestBundle: {2, 2, 2},
+		assignmentOrdinals := map[string][]space.Ordinal{
+			fallbackTestBundle: {ord(2), ord(2), ord(2)},
 		}
-		defaultSpaces := map[string]int{
-			fallbackTestBundle: 6,
+		defaultSpaces := map[string]space.Ordinal{
+			fallbackTestBundle: ord(6),
 		}
 
 		targets, skipped := planFallbackMoves(
@@ -247,9 +255,9 @@ func TestPlanFallbackMoves(t *testing.T) {
 
 				return fallbackTarget{}, nil
 			},
-			func(ordinal int) uint64 {
-				if ordinal != 6 {
-					t.Fatalf("fallback ordinal = %d, want configured default 6", ordinal)
+			func(ordinal space.Ordinal) uint64 {
+				if ordinal != ord(6) {
+					t.Fatalf("fallback ordinal = %v, want configured default %v", ordinal, ord(6))
 				}
 
 				return 106
@@ -264,7 +272,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			t.Fatalf("fallback targets = %d, want 1", len(targets))
 		}
 
-		if targets[0].entry.Ordinal != 6 || targets[0].sid != 106 {
+		if targets[0].entry.Ordinal != ord(6) || targets[0].sid != 106 {
 			t.Fatalf("fallback target = %#v, want configured ordinal 6 / space ID 106", targets[0])
 		}
 
@@ -287,11 +295,11 @@ func TestPlanFallbackMoves(t *testing.T) {
 			usedByBundle := map[string]map[int]bool{
 				fallbackTestBundle: {0: true},
 			}
-			assignmentOrdinals := map[string][]int{
-				fallbackTestBundle: {2, 5},
+			assignmentOrdinals := map[string][]space.Ordinal{
+				fallbackTestBundle: {ord(2), ord(5)},
 			}
-			defaultSpaces := map[string]int{
-				fallbackTestBundle: 8,
+			defaultSpaces := map[string]space.Ordinal{
+				fallbackTestBundle: ord(8),
 			}
 
 			targets, skipped := planFallbackMoves(
@@ -304,14 +312,14 @@ func TestPlanFallbackMoves(t *testing.T) {
 
 					return fallbackTarget{}, nil
 				},
-				func(ordinal int) uint64 { return uint64(ordinal) },
+				identityIDForOrdinal,
 			)
 
 			if len(skipped) != 0 {
 				t.Fatalf("skipped = %#v, want none", skipped)
 			}
 
-			if len(targets) != 1 || targets[0].entry.Ordinal != 8 {
+			if len(targets) != 1 || targets[0].entry.Ordinal != ord(8) {
 				t.Fatalf("targets = %#v, want configured ordinal 8", targets)
 			}
 		},
@@ -329,21 +337,21 @@ func TestPlanFallbackMoves(t *testing.T) {
 				},
 			}
 			usedByBundle := map[string]map[int]bool{}
-			defaultSpaces := map[string]int{
-				fallbackTestBundle: 9,
+			defaultSpaces := map[string]space.Ordinal{
+				fallbackTestBundle: ord(9),
 			}
 
 			targets, skipped := planFallbackMoves(
 				liveByBundle,
 				usedByBundle,
-				map[string][]int{},
+				map[string][]space.Ordinal{},
 				defaultSpaces,
 				func() (fallbackTarget, error) {
 					t.Fatal("primary display resolver must not run when a default is configured")
 
 					return fallbackTarget{}, nil
 				},
-				func(ordinal int) uint64 { return uint64(ordinal) },
+				identityIDForOrdinal,
 			)
 
 			if len(skipped) != 0 {
@@ -358,7 +366,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			}
 
 			for _, target := range targets {
-				if target.entry.Ordinal != 9 || !target.defaultConfigured {
+				if target.entry.Ordinal != ord(9) || !target.defaultConfigured {
 					t.Fatalf("target = %#v, want ordinal 9 and defaultConfigured = true", target)
 				}
 			}
@@ -369,7 +377,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 func TestMoveFailureSkipPreservesFallbackMarker(t *testing.T) {
 	t.Parallel()
 
-	entry := Entry{BundleID: fallbackTestBundle, Title: "window", Ordinal: 4}
+	entry := Entry{BundleID: fallbackTestBundle, Title: "window", Ordinal: ord(4)}
 
 	t.Run("direct match", func(t *testing.T) {
 		t.Parallel()

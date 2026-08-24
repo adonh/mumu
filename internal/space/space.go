@@ -91,43 +91,42 @@ func ActiveIndex() (int, error) {
 }
 
 // PrimaryDisplayCurrentSpace returns the macOS space ID and logical
-// left-to-right index of the Space currently shown on the configured primary
-// display.
-func PrimaryDisplayCurrentSpace() (uint64, int, error) {
+// Ordinal of the Space currently shown on the configured primary display.
+func PrimaryDisplayCurrentSpace() (uint64, Ordinal, error) {
 	return primaryDisplayCurrentSpace(
 		uint64(C.MumuPrimaryDisplaySpaceID()),
-		LogicalIndexForSpace,
+		OrdinalForSpace,
 	)
 }
 
-// PrimaryDisplayCurrentLogicalIndex returns the logical left-to-right index
-// of the Space currently shown on the configured primary display.
-func PrimaryDisplayCurrentLogicalIndex() (int, error) {
-	_, logicalIndex, err := PrimaryDisplayCurrentSpace()
+// PrimaryDisplayCurrentOrdinal returns the logical Ordinal of the Space
+// currently shown on the configured primary display.
+func PrimaryDisplayCurrentOrdinal() (Ordinal, error) {
+	_, ordinal, err := PrimaryDisplayCurrentSpace()
 
-	return logicalIndex, err
+	return ordinal, err
 }
 
 func primaryDisplayCurrentSpace(
 	spaceID uint64,
-	indexForSpace func(uint64) int,
-) (uint64, int, error) {
+	ordinalForSpace func(uint64) Ordinal,
+) (uint64, Ordinal, error) {
 	if spaceID == 0 {
-		return 0, 0, derrors.New(
+		return 0, Ordinal{}, derrors.New(
 			derrors.CodeActionFailed,
 			"failed to resolve the primary display's current space",
 		)
 	}
 
-	logicalIndex := indexForSpace(spaceID)
-	if logicalIndex == 0 {
-		return 0, 0, derrors.New(
+	ordinal := ordinalForSpace(spaceID)
+	if ordinal == (Ordinal{}) {
+		return 0, Ordinal{}, derrors.New(
 			derrors.CodeActionFailed,
 			"primary display's current space is not in the logical space ordering",
 		)
 	}
 
-	return spaceID, logicalIndex, nil
+	return spaceID, ordinal, nil
 }
 
 // MoveWindow moves the frontmost window to the space at the given 1-based index.

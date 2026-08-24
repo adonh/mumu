@@ -33,9 +33,9 @@
 
 ## Space Numbering
 
-`mumu`'s own ordinal (shown as `#3`, `#21`, etc.) is counted **left to right across all connected displays**, independent of which display is primary — matching how a person visually counts Spaces on screen.
+`mumu`'s own ordinal is a two-part `<display>:<space>` pair (shown as `#2:01`, `#1:21`, etc.): the display ordinal counts connected displays **left to right**, and the space ordinal counts that display's Spaces left to right — independent of which display is primary, and independent of every other display's Space count, matching how a person visually counts Spaces on screen. Because numbering is scoped per display, adding or removing a Space on one display never renumbers another display's Spaces.
 
-Because this can diverge from macOS's own Mission Control ordering whenever the primary display isn't the leftmost one, any output that names a specific window's Space (`show`, restore's per-window progress, and its skip summary) shows both numbers together, e.g. `#03 (space 21)` — mumu's own ordinal first, then the macOS Mission Control Space number in parentheses, which is the same ordinal macOS's own "Switch to Desktop `<n>`" keyboard shortcut uses. The Mission Control number is resolved fresh against the current display arrangement each time it's printed, so it always reflects what's true right now (it's never saved to the layout file).
+Because this can diverge from macOS's own Mission Control ordering whenever the primary display isn't the leftmost one, any output that names a specific window's Space (`show`, restore's per-window progress, and its skip summary) shows both numbers together, e.g. `#2:01 (space 21)` — mumu's own two-part ordinal first, then the macOS Mission Control Space number in parentheses, which is the same ordinal macOS's own "Switch to Desktop `<n>`" keyboard shortcut uses. The Mission Control number is resolved fresh against the current display arrangement each time it's printed, so it always reflects what's true right now (it's never saved to the layout file).
 
 ## Output ordering (`--sort`)
 

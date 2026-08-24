@@ -58,31 +58,38 @@ int MumuMoveWindowIDToSpace(uint32_t windowID, uint64_t spaceID);
 uint32_t MumuCursorDisplayID(void);
 void MumuActivateDisplay(uint32_t did);
 
-#pragma mark - Logical (Left-to-Right) Space Numbering
+#pragma mark - Logical (Two-Part Display + Space) Numbering
 //
 // A numbering scheme scoped to the layout save/restore capability only: all
 // connected displays are sorted by physical left-to-right position
-// (CGDisplayBounds.origin.x) and each display's own Spaces are concatenated
-// in that order, regardless of which display is the primary (menu-bar)
-// display. This differs from MumuMissionControlSpaceID's ordering (which is
-// primary-display-first, per SLSCopyManagedDisplaySpaces) and must not
-// alter it.
+// (CGDisplayBounds.origin.x) and numbered 1-based in that order, regardless
+// of which display is the primary (menu-bar) display; each display's own
+// Spaces are separately numbered 1-based in that display's own native
+// order, independent of any other display's Space count. This differs from
+// MumuMissionControlSpaceID's ordering (which is a single flat,
+// primary-display-first sequence, per SLSCopyManagedDisplaySpaces) and must
+// not alter it. Scoping the Space part to its own display means adding or
+// removing a Space on one display never renumbers another display's Spaces.
 
-/// Total number of Spaces, counted in logical left-to-right order. Numerically
-/// equal to MumuCountMissionControlSpaces(); only the ordering differs.
-int MumuLogicalSpaceCount(void);
+/// Number of connected displays, in left-to-right order (i.e. the valid
+/// range for a logical display ordinal is 1..this value).
+int MumuLogicalDisplayCount(void);
 
-/// The macOS Space ID at the given 1-based logical left-to-right index, or 0
-/// if out of range.
-uint64_t MumuLogicalSpaceID(int logicalIndex);
+/// The macOS Space ID at the given 1-based logical (display, space)
+/// ordinal pair, or 0 if either part is out of range.
+uint64_t MumuOrdinalSpaceID(int displayOrdinal, int spaceOrdinal);
 
-/// The 1-based logical left-to-right index for a given macOS Space ID, or 0
-/// if not found.
-int MumuLogicalIndexForSpace(uint64_t sid);
+/// Resolves a macOS Space ID to its 1-based logical display ordinal
+/// (*outDisplay) and 1-based logical space-within-display ordinal
+/// (*outSpace). Returns 0 and leaves the out-params untouched if sid isn't
+/// found; returns 1 on success.
+int MumuSpaceOrdinal(uint64_t sid, int *outDisplay, int *outSpace);
 
 /// Per-display Space-count sequence in left-to-right order, used to detect
-/// display-arrangement drift between save and restore. *outCount is set to
-/// the number of displays. Caller must free() the returned array.
+/// display-arrangement drift between save and restore, and to bounds-check
+/// a space-within-display ordinal against its own display's current Space
+/// count. *outCount is set to the number of displays. Caller must free()
+/// the returned array.
 int *MumuLeftToRightSpaceCounts(int *outCount);
 
 #pragma mark - Layout: Window Enumeration Across All Spaces

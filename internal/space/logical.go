@@ -9,25 +9,32 @@ import "C"
 
 import "unsafe"
 
-// LogicalCount returns the total number of Mission Control spaces, counted
-// in logical left-to-right order. Numerically identical to Count(); only the
-// ordering used to reach that total differs. This numbering is scoped to the
-// layout save/restore capability and is independent of which display is
+// LogicalDisplayCount returns the number of currently connected displays,
+// in left-to-right order (i.e. the valid range for an Ordinal's Display
+// field is 1..this value). This numbering is scoped to the layout
+// save/restore capability and is independent of which display is
 // primary — see internal/native/mumu.h for details.
-func LogicalCount() int {
-	return int(C.MumuLogicalSpaceCount())
+func LogicalDisplayCount() int {
+	return int(C.MumuLogicalDisplayCount())
 }
 
-// LogicalSpaceID returns the macOS space ID at the given 1-based logical
-// left-to-right index, or 0 if the index is out of range.
-func LogicalSpaceID(logicalIndex int) uint64 {
-	return uint64(C.MumuLogicalSpaceID(C.int(logicalIndex)))
+// IDForOrdinal returns the macOS space ID at the given logical
+// Ordinal, or 0 if either the display or the space-within-display part is
+// out of range.
+func IDForOrdinal(o Ordinal) uint64 {
+	return uint64(C.MumuOrdinalSpaceID(C.int(o.Display), C.int(o.Space)))
 }
 
-// LogicalIndexForSpace returns the 1-based logical left-to-right index for a
-// given macOS space ID, or 0 if the space ID is not currently known.
-func LogicalIndexForSpace(sid uint64) int {
-	return int(C.MumuLogicalIndexForSpace(C.uint64_t(sid)))
+// OrdinalForSpace returns the logical Ordinal for a given macOS space ID,
+// or the zero Ordinal if the space ID is not currently known.
+func OrdinalForSpace(sid uint64) Ordinal {
+	var display, spaceIdx C.int
+
+	if C.MumuSpaceOrdinal(C.uint64_t(sid), &display, &spaceIdx) == 0 {
+		return Ordinal{}
+	}
+
+	return Ordinal{Display: int(display), Space: int(spaceIdx)}
 }
 
 // LeftToRightSpaceCounts returns the per-display space-count sequence in

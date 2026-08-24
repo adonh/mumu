@@ -21,21 +21,21 @@ pins:
   2:
     - bundle_id: com.tinyspeck.slackmacgap
       title: "general"
-      ordinal: 1
+      ordinal: "1:1"
   4:
     - bundle_id: com.tinyspeck.slackmacgap
       title: "general"
-      ordinal: 1
+      ordinal: "1:1"
     - bundle_id: com.google.Chrome
       title: "GitHub"
-      ordinal: 5
+      ordinal: "2:1"
 
 pin_precedence: pin
 
 default_spaces:
   2:
     - bundle_id: com.tinyspeck.slackmacgap
-      ordinal: 1
+      ordinal: "1:1"
 
 hooks:
   off:
@@ -56,7 +56,7 @@ One entry under a `pins` display-count list.
 | ----------- | ------ | ------------------------------------------------------------------------------------------------ |
 | `bundle_id` | string | The pinned application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
 | `title`     | string | Approximate title pattern, matched the same way `mumu restore` matches saved-layout entries against open windows (shared-word similarity, not an exact match). Must be a non-empty string. |
-| `ordinal`   | int    | Target Space's logical left-to-right ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
+| `ordinal`   | string | Target Space's two-part `"<display>:<space>"` ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Both parts must be positive integers (e.g. `"2:1"`). |
 
 ### Default-space rule object
 
@@ -65,7 +65,7 @@ One entry under a `default_spaces` display-count list.
 | Key         | Type   | Notes                                                                                          |
 | ----------- | ------ | ------------------------------------------------------------------------------------------------ |
 | `bundle_id` | string | The application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
-| `ordinal`   | int    | Target Space's logical left-to-right ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)) — for that application's leftover unclaimed windows. Must be a positive integer. |
+| `ordinal`   | string | Target Space's two-part `"<display>:<space>"` ordinal — mumu's own numbering, not the macOS Mission Control Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)) — for that application's leftover unclaimed windows. Both parts must be positive integers (e.g. `"2:1"`). |
 
 Unlike a [pin rule](#pin-rule-object), there's no `title`: a default-space rule is application-level, not per-window. When configured for an application at the current display count, it always wins over the usual "most prevalent assigned Space" fallback for that application's leftover windows — even when that heuristic would otherwise produce an unambiguous (non-tied) target — and it also activates a fallback placement for an application with zero valid saved-entry matches this restore, a case that otherwise receives no fallback at all. See `mumu restore --help` and the `space-layout` capability spec for the full precedence order.
 
@@ -93,10 +93,10 @@ Loading rules:
 - If `config.yaml` doesn't exist yet, it's auto-created with commented defaults (see `defaultConfigYAML` in `internal/config/config.go`) and never overwritten afterward.
 - Missing/empty `data_dir`, or a `data_dir` value that isn't a plain string, is a load error (`CodeInvalidConfig`) — the process exits rather than silently falling back to a default.
 - A missing `pins` setting means no pins are configured for any display count; `mumu restore` proceeds using only its saved-layout matching.
-- Any pin rule missing `bundle_id` or `title`, or with an `ordinal` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
+- Any pin rule missing `bundle_id` or `title`, or with an `ordinal` that isn't a valid `"<display>:<space>"` string (both parts positive integers), is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A `pin_precedence` value other than `pin` or `layout` is a load error (`CodeInvalidConfig`).
 - A missing `default_spaces` setting means no application has a configured default Space for any display count; `mumu restore` proceeds using only its prevalent-Space fallback heuristic.
-- Any default-space rule missing `bundle_id`, or with an `ordinal` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
+- Any default-space rule missing `bundle_id`, or with an `ordinal` that isn't a valid `"<display>:<space>"` string (both parts positive integers), is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A missing `hooks` setting means no hooks are configured, globally or for any display count; `mumu restore` runs no external commands.
 - Any command entry that's neither a non-empty string nor a non-empty list of non-empty strings, or an `off`/`on` value that isn't a list, is a load error (`CodeInvalidConfig`) naming the config file path and the offending entry.
 - Malformed YAML is a load error (`CodeInvalidConfig`).
@@ -111,7 +111,7 @@ Saved window-to-Space layouts are internal state, not a user-facing file: mumu m
 
 | Key             | Type                            | Notes                                                        |
 | --------------- | -------------------------------- | -------------------------------------------------------------- |
-| `schemaVersion` | int                              | On-disk schema version. Currently always `1`.                |
+| `schemaVersion` | int                              | On-disk schema version. Currently always `2`. A layout file written by an incompatible version fails to load with a clear error asking you to run `mumu save` again — there's no automatic migration. |
 | `displayCount`  | int                               | The number of connected displays this layout was captured for; matches the file name. |
 | `spaceCounts`   | list of int                       | Per-display Space count, left to right, recorded at save time. Used at restore to detect arrangement drift (a different Space count per display than when saved) and prompt for confirmation. |
 | `entries`       | list of [Entry](#entry-object)   | The saved windows for this display count.                    |
@@ -126,11 +126,11 @@ One saved window.
 | `bundleId` | string | The owning application's bundle identifier (e.g. `com.google.Chrome`).                                                                     |
 | `title`    | string | The window's title at save time. Primary signal for restore matching.                                                                     |
 | `index`    | int    | 0-based position among the app's other captured (non-fullscreen) windows, in save-time enumeration order. Restore-time fallback when title matching is ambiguous. |
-| `ordinal`  | int    | The window's logical left-to-right Space number — mumu's own numbering (see [CLI Guide — Space Numbering](CLI.md#space-numbering)), not the macOS Mission Control Space number — independent of which display is primary. |
+| `ordinal`  | object | The window's two-part Space ordinal, `{"display": D, "space": S}` — mumu's own numbering (see [CLI Guide — Space Numbering](CLI.md#space-numbering)), not the macOS Mission Control Space number. `display` counts connected displays left to right; `space` counts that display's Spaces left to right, independent of every other display's Space count. |
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "displayCount": 2,
   "spaceCounts": [3, 2],
   "savedAt": "2026-08-20T14:02:07-04:00",
@@ -139,7 +139,7 @@ One saved window.
       "bundleId": "com.google.Chrome",
       "title": "mumu/README.md at feature/10-config-file",
       "index": 0,
-      "ordinal": 2
+      "ordinal": {"display": 1, "space": 2}
     }
   ]
 }
@@ -148,4 +148,5 @@ One saved window.
 Loading rules:
 
 - A missing layout file for a given display count is a "no saved layout" condition (e.g. `mumu restore` reports it clearly), not treated as an empty layout.
+- A layout file whose `schemaVersion` doesn't match the current version (e.g. one saved by an older mumu build) is a load error identifying the file path and instructing you to run `mumu save` again — checked before the rest of the file is parsed, so it's reported instead of a raw JSON type-mismatch error.
 - Malformed JSON is a load error identifying the file path.

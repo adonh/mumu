@@ -2,6 +2,7 @@ package layout
 
 import (
 	"github.com/adonh/mumu/internal/config"
+	"github.com/adonh/mumu/internal/space"
 	"github.com/adonh/mumu/internal/window"
 )
 
@@ -35,8 +36,8 @@ func pinEntriesByBundle(pins []config.PinRule) map[string][]Entry {
 // mistake — config.Load does not reject it), the last rule for that
 // bundle ID wins, matching how a plain YAML map would behave for a
 // duplicate key.
-func defaultSpacesByBundle(rules []config.DefaultSpaceRule) map[string]int {
-	byBundle := make(map[string]int, len(rules))
+func defaultSpacesByBundle(rules []config.DefaultSpaceRule) map[string]space.Ordinal {
+	byBundle := make(map[string]space.Ordinal, len(rules))
 
 	for _, rule := range rules {
 		byBundle[rule.BundleID] = rule.Ordinal

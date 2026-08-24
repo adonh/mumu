@@ -10,6 +10,7 @@ import (
 
 	derrors "github.com/adonh/mumu/internal/errors"
 	"github.com/adonh/mumu/internal/paths"
+	"github.com/adonh/mumu/internal/space"
 )
 
 // PinPrecedence controls whether pin rules or saved-layout entries win
@@ -32,10 +33,10 @@ type PinRule struct {
 	// Title is the approximate title pattern matched against that
 	// application's currently open window titles.
 	Title string
-	// Ordinal is the target Space's logical left-to-right ordinal (see
-	// internal/space's logical numbering), not the macOS Mission Control
-	// Space number.
-	Ordinal int
+	// Ordinal is the target Space's logical two-part (display,
+	// space-within-display) ordinal (see internal/space's logical
+	// numbering), not the macOS Mission Control Space number.
+	Ordinal space.Ordinal
 }
 
 // DefaultSpaceRule is a single user-configured application-level fallback
@@ -45,10 +46,10 @@ type PinRule struct {
 type DefaultSpaceRule struct {
 	// BundleID is the application's bundle identifier.
 	BundleID string
-	// Ordinal is the target Space's logical left-to-right ordinal (see
-	// internal/space's logical numbering), not the macOS Mission Control
-	// Space number.
-	Ordinal int
+	// Ordinal is the target Space's logical two-part (display,
+	// space-within-display) ordinal (see internal/space's logical
+	// numbering), not the macOS Mission Control Space number.
+	Ordinal space.Ordinal
 }
 
 // Errors returned by Command.UnmarshalYAML for invalid hook command
@@ -172,14 +173,14 @@ const (
 type pinRuleFileFormat struct {
 	BundleID string `yaml:"bundle_id"` //nolint:tagliatelle // Stable user-facing config key name.
 	Title    string `yaml:"title"`
-	Ordinal  int    `yaml:"ordinal"`
+	Ordinal  string `yaml:"ordinal"`
 }
 
 // defaultSpaceRuleFileFormat is the on-disk shape of one entry under a
 // config.yaml "default_spaces" display-count list.
 type defaultSpaceRuleFileFormat struct {
 	BundleID string `yaml:"bundle_id"` //nolint:tagliatelle // Stable user-facing config key name.
-	Ordinal  int    `yaml:"ordinal"`
+	Ordinal  string `yaml:"ordinal"`
 }
 
 // hooksLayoutFileFormat is the on-disk shape of one entry under a
@@ -297,8 +298,9 @@ func Load() (*Config, error) {
 }
 
 // validatePins checks every configured pin rule has a non-empty bundle_id
-// and title and a positive space ordinal, returning a clear error naming
-// the config file path and the offending entry otherwise.
+// and title and an ordinal in "<display>:<space>" format, returning a
+// clear error naming the config file path and the offending entry
+// otherwise.
 func validatePins(path string, raw map[int][]pinRuleFileFormat) (map[int][]PinRule, error) {
 	if len(raw) == 0 {
 		return map[int][]PinRule{}, nil
@@ -329,10 +331,12 @@ func validatePins(path string, raw map[int][]pinRuleFileFormat) (map[int][]PinRu
 				)
 			}
 
-			if rule.Ordinal <= 0 {
+			ordinal, err := space.ParseOrdinal(rule.Ordinal)
+			if err != nil {
 				return nil, derrors.Newf(
 					derrors.CodeInvalidConfig,
-					"config file %s: pins for %d display(s), app %s: ordinal must be a positive integer, got %d",
+					`config file %s: pins for %d display(s), app %s: ordinal must be in `+
+						`"<display>:<space>" format (e.g. "2:1"), got %q`,
 					path,
 					displayCount,
 					rule.BundleID,
@@ -340,7 +344,11 @@ func validatePins(path string, raw map[int][]pinRuleFileFormat) (map[int][]PinRu
 				)
 			}
 
-			converted = append(converted, PinRule(rule))
+			converted = append(converted, PinRule{
+				BundleID: rule.BundleID,
+				Title:    rule.Title,
+				Ordinal:  ordinal,
+			})
 		}
 
 		pins[displayCount] = converted
@@ -373,8 +381,9 @@ func validatePinPrecedence(path, raw string) (PinPrecedence, error) {
 }
 
 // validateDefaultSpaces checks every configured default-space rule has a
-// non-empty bundle_id and a positive space ordinal, returning a clear
-// error naming the config file path and the offending entry otherwise.
+// non-empty bundle_id and an ordinal in "<display>:<space>" format,
+// returning a clear error naming the config file path and the offending
+// entry otherwise.
 func validateDefaultSpaces(
 	path string,
 	raw map[int][]defaultSpaceRuleFileFormat,
@@ -398,10 +407,12 @@ func validateDefaultSpaces(
 				)
 			}
 
-			if rule.Ordinal <= 0 {
+			ordinal, err := space.ParseOrdinal(rule.Ordinal)
+			if err != nil {
 				return nil, derrors.Newf(
 					derrors.CodeInvalidConfig,
-					"config file %s: default_spaces for %d display(s), app %s: ordinal must be a positive integer, got %d",
+					`config file %s: default_spaces for %d display(s), app %s: ordinal must be in `+
+						`"<display>:<space>" format (e.g. "2:1"), got %q`,
 					path,
 					displayCount,
 					rule.BundleID,
@@ -409,7 +420,10 @@ func validateDefaultSpaces(
 				)
 			}
 
-			converted = append(converted, DefaultSpaceRule(rule))
+			converted = append(converted, DefaultSpaceRule{
+				BundleID: rule.BundleID,
+				Ordinal:  ordinal,
+			})
 		}
 
 		defaultSpaces[displayCount] = converted
@@ -469,15 +483,17 @@ func defaultConfigYAML(dataDir string) string {
 		"# \"mumu restore\", keyed by the number of connected displays (different\n" +
 		"# display counts can declare entirely different pins). Each rule needs\n" +
 		"# an app's bundle_id, an approximate title pattern (matched the same way\n" +
-		"# restore matches saved layouts), and a target ordinal (mumu's own\n" +
-		"# logical left-to-right Space number, not the macOS Mission Control\n" +
-		"# Space number). Absent or empty means no pins.\n" +
+		"# restore matches saved layouts), and a target ordinal in \"<display>:<space>\"\n" +
+		"# form (mumu's own logical two-part Space number — the display's\n" +
+		"# left-to-right position, then the Space's position within that display —\n" +
+		"# not the macOS Mission Control Space number). Absent or empty means no\n" +
+		"# pins.\n" +
 		"#\n" +
 		"# pins:\n" +
 		"#   2:\n" +
 		"#     - bundle_id: com.tinyspeck.slackmacgap\n" +
 		"#       title: \"Slack\"\n" +
-		"#       ordinal: 1\n" +
+		"#       ordinal: \"2:1\"\n" +
 		"\n" +
 		"# pin_precedence: whether pins (\"pin\", the default) or the saved layout\n" +
 		"# (\"layout\") wins when both would claim the same open window during\n" +
@@ -497,7 +513,7 @@ func defaultConfigYAML(dataDir string) string {
 		"# default_spaces:\n" +
 		"#   2:\n" +
 		"#     - bundle_id: com.tinyspeck.slackmacgap\n" +
-		"#       ordinal: 1\n" +
+		"#       ordinal: \"2:1\"\n" +
 		"\n" +
 		"# hooks: external commands run automatically around every \"mumu restore\".\n" +
 		"# \"off\" commands run first, before any window is moved; \"on\" commands run\n" +

@@ -3,8 +3,16 @@ package layout //nolint:testpackage // tests unexported planDirectMoves / intSli
 import (
 	"testing"
 
+	"github.com/adonh/mumu/internal/space"
 	"github.com/adonh/mumu/internal/window"
 )
+
+// testSpaceCounts is a single display with 10 Spaces — big enough to
+// exercise in-range ordinals while still letting a deliberately large
+// Space number (e.g. 99) trigger the out-of-range path.
+var testSpaceCounts = []int{10}
+
+const testTitleReport = "Report"
 
 func liveEntry(title string) window.AcrossSpacesEntry {
 	return window.AcrossSpacesEntry{Title: title}
@@ -15,7 +23,7 @@ func TestPlanDirectMoves_MatchesByTitleSimilarity(t *testing.T) {
 
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: "Beta", Index: 0, Ordinal: 3},
+			{BundleID: fallbackTestBundle, Title: "Beta", Index: 0, Ordinal: ord(3)},
 		},
 	}
 	liveByBundle := map[string][]window.AcrossSpacesEntry{
@@ -26,8 +34,8 @@ func TestPlanDirectMoves_MatchesByTitleSimilarity(t *testing.T) {
 		entriesByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(skipped) != 0 {
@@ -42,7 +50,7 @@ func TestPlanDirectMoves_MatchesByTitleSimilarity(t *testing.T) {
 		t.Fatal("exact title match marked fuzzy, want false")
 	}
 
-	if got := validOrdinals[fallbackTestBundle]; len(got) != 1 || got[0] != 3 {
+	if got := validOrdinals[fallbackTestBundle]; len(got) != 1 || got[0] != ord(3) {
 		t.Fatalf("validAssignmentOrdinals = %#v, want [3]", got)
 	}
 }
@@ -58,8 +66,8 @@ func TestPlanDirectMoves_OneToOneWhenTwoEntriesPreferTheSameWindow(t *testing.T)
 	// (live[2]) rather than leaving it unmatched.
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: "a b c d", Index: 0, Ordinal: 1},
-			{BundleID: fallbackTestBundle, Title: "a b c d e", Index: 1, Ordinal: 2},
+			{BundleID: fallbackTestBundle, Title: "a b c d", Index: 0, Ordinal: ord(1)},
+			{BundleID: fallbackTestBundle, Title: "a b c d e", Index: 1, Ordinal: ord(2)},
 		},
 	}
 	liveByBundle := map[string][]window.AcrossSpacesEntry{
@@ -74,8 +82,8 @@ func TestPlanDirectMoves_OneToOneWhenTwoEntriesPreferTheSameWindow(t *testing.T)
 		entriesByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(skipped) != 0 {
@@ -96,16 +104,16 @@ func TestPlanDirectMoves_OneToOneWhenTwoEntriesPreferTheSameWindow(t *testing.T)
 		claimed[target.windowID] = true
 	}
 
-	byOrdinal := map[int]moveTarget{}
+	byOrdinal := map[space.Ordinal]moveTarget{}
 	for _, target := range toMove {
 		byOrdinal[target.entry.Ordinal] = target
 	}
 
-	if got := byOrdinal[1]; got.windowID != 1 || got.fuzzy {
+	if got := byOrdinal[ord(1)]; got.windowID != 1 || got.fuzzy {
 		t.Fatalf("ordinal 1 target = %#v, want window 1, not fuzzy (exact match)", got)
 	}
 
-	if got := byOrdinal[2]; got.windowID != 3 || !got.fuzzy {
+	if got := byOrdinal[ord(2)]; got.windowID != 3 || !got.fuzzy {
 		t.Fatalf("ordinal 2 target = %#v, want window 3, fuzzy (approximate match)", got)
 	}
 }
@@ -114,15 +122,17 @@ func TestPlanDirectMoves_UnmatchedWhenAppNotRunning(t *testing.T) {
 	t.Parallel()
 
 	entriesByBundle := map[string][]Entry{
-		fallbackTestBundle: {{BundleID: fallbackTestBundle, Title: "Report", Ordinal: 1}},
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: testTitleReport, Ordinal: ord(1)},
+		},
 	}
 
 	toMove, skipped, validOrdinals := planDirectMoves(
 		entriesByBundle,
 		map[string][]window.AcrossSpacesEntry{},
 		map[string]map[int]bool{},
-		10,
-		func(int) uint64 { return 0 },
+		testSpaceCounts,
+		func(space.Ordinal) uint64 { return 0 },
 	)
 
 	if len(toMove) != 0 {
@@ -143,8 +153,8 @@ func TestPlanDirectMoves_UnmatchedWhenMoreEntriesThanWindows(t *testing.T) {
 
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: "foo", Index: 0, Ordinal: 1},
-			{BundleID: fallbackTestBundle, Title: "bar", Index: 1, Ordinal: 2},
+			{BundleID: fallbackTestBundle, Title: "foo", Index: 0, Ordinal: ord(1)},
+			{BundleID: fallbackTestBundle, Title: "bar", Index: 1, Ordinal: ord(2)},
 		},
 	}
 	liveByBundle := map[string][]window.AcrossSpacesEntry{
@@ -155,8 +165,8 @@ func TestPlanDirectMoves_UnmatchedWhenMoreEntriesThanWindows(t *testing.T) {
 		entriesByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(toMove) != 1 {
@@ -172,18 +182,20 @@ func TestPlanDirectMoves_SkipsOutOfRangeOrdinal(t *testing.T) {
 	t.Parallel()
 
 	entriesByBundle := map[string][]Entry{
-		fallbackTestBundle: {{BundleID: fallbackTestBundle, Title: "Report", Ordinal: 99}},
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: testTitleReport, Ordinal: ord(99)},
+		},
 	}
 	liveByBundle := map[string][]window.AcrossSpacesEntry{
-		fallbackTestBundle: {liveEntry("Report")},
+		fallbackTestBundle: {liveEntry(testTitleReport)},
 	}
 
 	toMove, skipped, validOrdinals := planDirectMoves(
 		entriesByBundle,
 		liveByBundle,
 		map[string]map[int]bool{},
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	if len(toMove) != 0 {
@@ -199,6 +211,80 @@ func TestPlanDirectMoves_SkipsOutOfRangeOrdinal(t *testing.T) {
 	}
 }
 
+func TestPlanDirectMoves_SkipsOutOfRangeDisplay(t *testing.T) {
+	t.Parallel()
+
+	// Display 2 doesn't exist in a single-display test arrangement, even
+	// though Space 1 would be in range on display 1 — proving the
+	// display part is bounds-checked independently of the Space part.
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{
+				BundleID: fallbackTestBundle,
+				Title:    testTitleReport,
+				Ordinal:  space.Ordinal{Display: 2, Space: 1},
+			},
+		},
+	}
+	liveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {liveEntry(testTitleReport)},
+	}
+
+	toMove, skipped, _ := planDirectMoves(
+		entriesByBundle,
+		liveByBundle,
+		map[string]map[int]bool{},
+		testSpaceCounts,
+		identityIDForOrdinal,
+	)
+
+	if len(toMove) != 0 {
+		t.Fatalf("toMove = %#v, want none", toMove)
+	}
+
+	if len(skipped) != 1 || skipped[0].Reason != SkipOrdinalOutOfRange {
+		t.Fatalf("skipped = %#v, want one SkipOrdinalOutOfRange", skipped)
+	}
+}
+
+func TestOrdinalInBounds_IndependentPerDisplay(t *testing.T) {
+	t.Parallel()
+
+	// Two displays: 2 Spaces on display 1, 5 Spaces on display 2.
+	counts := []int{2, 5}
+
+	cases := []struct {
+		name    string
+		ordinal space.Ordinal
+		want    bool
+	}{
+		{name: "in range on display 1", ordinal: space.Ordinal{Display: 1, Space: 2}, want: true},
+		{
+			name:    "out of range on display 1 even though in range on display 2",
+			ordinal: space.Ordinal{Display: 1, Space: 5},
+			want:    false,
+		},
+		{name: "in range on display 2", ordinal: space.Ordinal{Display: 2, Space: 5}, want: true},
+		{
+			name:    "out of range on display 2 even though in range on display 1",
+			ordinal: space.Ordinal{Display: 2, Space: 2},
+			want:    true,
+		},
+		{name: "display out of range", ordinal: space.Ordinal{Display: 3, Space: 1}, want: false},
+		{name: "zero-value ordinal is out of range", ordinal: space.Ordinal{}, want: false},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ordinalInBounds(tt.ordinal, counts); got != tt.want {
+				t.Fatalf("ordinalInBounds(%v, %v) = %v, want %v", tt.ordinal, counts, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestFallbackAndFuzzyMarkersAreDisjoint guards the invariant documented on
 // moveTarget: fallback placements (from planFallbackMoves) and fuzzy
 // matches (from planDirectMoves) come from disjoint code paths and must
@@ -208,7 +294,7 @@ func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
 
 	entriesByBundle := map[string][]Entry{
 		fallbackTestBundle: {
-			{BundleID: fallbackTestBundle, Title: "totally different", Index: 0, Ordinal: 4},
+			{BundleID: fallbackTestBundle, Title: "totally different", Index: 0, Ordinal: ord(4)},
 		},
 	}
 	liveByBundle := map[string][]window.AcrossSpacesEntry{
@@ -223,17 +309,17 @@ func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
 		entriesByBundle,
 		liveByBundle,
 		usedIndex,
-		10,
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		testSpaceCounts,
+		identityIDForOrdinal,
 	)
 
 	fallbackMoves, _ := planFallbackMoves(
 		liveByBundle,
 		usedIndex,
 		validOrdinals,
-		map[string]int{},
+		map[string]space.Ordinal{},
 		func() (fallbackTarget, error) { return fallbackTarget{}, nil },
-		func(ordinal int) uint64 { return uint64(ordinal) },
+		identityIDForOrdinal,
 	)
 
 	for _, target := range append(directMoves, fallbackMoves...) {
