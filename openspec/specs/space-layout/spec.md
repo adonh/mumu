@@ -74,7 +74,13 @@ Before moving any windows, if the current physical left-to-right display arrange
 
 For each application with saved window entries, the system SHALL match its saved entries to that application's currently open windows as a single batch: for every remaining saved entry and every remaining currently open window not yet claimed by another saved entry, the system SHALL measure title similarity as the proportion of shared words to total distinct words between the saved title and the window's title, comparing words case-insensitively and independent of word order. The system SHALL then assign entry-window pairs starting from the highest similarity score downward, skipping any entry or window already assigned, until no further pair can be assigned. When two or more candidate windows tie for an entry's highest score (or two or more entries tie for a window's highest score), the system SHALL prefer the candidate whose current position among the application's open windows equals the entry's saved positional index; if that does not resolve the tie, the system SHALL deterministically choose one of the tied candidates rather than leaving the entry unmatched. A saved entry SHALL remain unmatched only when no currently open window of that application remains unclaimed for it.
 
-After completing those matching steps for an application, the system SHALL place every remaining unclaimed currently open window of that application only when the application has at least one valid saved-entry assignment. The fallback target SHALL be the logical Space ordinal occurring most often among that application's valid saved-entry assignments. If two or more logical Space ordinals tie for most prevalent, the fallback target SHALL instead be the logical Space currently displayed on the primary (menu-bar) display. The system SHALL report each fallback placement in restore progress output and SHALL move each currently open window at most once. If the application has no valid saved-entry assignment, the system SHALL leave its remaining unclaimed open windows unchanged.
+After completing those matching steps for an application, the system SHALL place every remaining unclaimed currently open window of that application according to the following order of precedence:
+
+1. If the configuration file (see the `configuration` capability) has a `default_spaces` rule for that application's bundle identifier at the current display count, the fallback target SHALL be that rule's configured logical Space ordinal, regardless of the application's valid saved-entry assignments (if any) or whether they would otherwise tie.
+2. Otherwise, if the application has at least one valid saved-entry assignment this restore, the fallback target SHALL be the logical Space ordinal occurring most often among those assignments; if two or more logical Space ordinals tie for most prevalent, the fallback target SHALL instead be the logical Space currently displayed on the primary (menu-bar) display.
+3. Otherwise (no configured `default_spaces` rule and no valid saved-entry assignment), the system SHALL leave the application's remaining unclaimed open windows unchanged.
+
+The system SHALL report each fallback placement in restore progress output, distinguishing a configured-default placement from a prevalent-Space placement, and SHALL move each currently open window at most once.
 
 #### Scenario: Exact title match
 
@@ -133,23 +139,33 @@ After completing those matching steps for an application, the system SHALL place
 
 #### Scenario: Fallback to an application's prevalent assigned Space
 
-- **WHEN** one open Chrome window has a valid saved-entry assignment to logical Space 4 and another open Chrome window remains unclaimed after batch matching
+- **WHEN** one open Chrome window has a valid saved-entry assignment to logical Space 4 and another open Chrome window remains unclaimed after batch matching, and Chrome has no configured `default_spaces` rule for the current display count
 - **THEN** the system moves the unclaimed Chrome window to logical Space 4 and reports that placement in restore progress output
 
 #### Scenario: Most prevalent Space wins
 
-- **WHEN** an application's valid saved-entry assignments target logical Spaces 2, 2, and 5, and one of its currently open windows remains unclaimed after standard matching
+- **WHEN** an application's valid saved-entry assignments target logical Spaces 2, 2, and 5, one of its currently open windows remains unclaimed after standard matching, and that application has no configured `default_spaces` rule for the current display count
 - **THEN** the system moves the unclaimed window to logical Space 2
 
 #### Scenario: Tied prevalent Spaces use the primary display's current Space
 
-- **WHEN** an application's valid saved-entry assignments are evenly split between logical Spaces 2 and 5, one of its currently open windows remains unclaimed after standard matching, and the primary display currently shows logical Space 7
+- **WHEN** an application's valid saved-entry assignments are evenly split between logical Spaces 2 and 5, one of its currently open windows remains unclaimed after standard matching, that application has no configured `default_spaces` rule for the current display count, and the primary display currently shows logical Space 7
 - **THEN** the system moves the unclaimed window to logical Space 7 and reports that placement in restore progress output
 
 #### Scenario: No valid assignment leaves unmatched windows unchanged
 
-- **WHEN** an application's currently open windows cannot be matched to any valid saved-entry assignment
+- **WHEN** an application's currently open windows cannot be matched to any valid saved-entry assignment, and that application has no configured `default_spaces` rule for the current display count
 - **THEN** the system does not move that application's remaining unclaimed windows through the application-level fallback
+
+#### Scenario: Configured default space overrides the prevalent-Space heuristic
+
+- **WHEN** an application has a configured `default_spaces` rule targeting logical Space 6 for the current display count, and its valid saved-entry assignments this restore unambiguously target logical Space 2
+- **THEN** the system moves that application's remaining unclaimed windows to logical Space 6, not logical Space 2, and reports the placement as a configured-default placement
+
+#### Scenario: Configured default space activates a fallback with zero valid saved-entry assignments
+
+- **WHEN** an application has a configured `default_spaces` rule targeting logical Space 8 for the current display count, and none of its currently open windows were matched to any valid saved-entry assignment this restore
+- **THEN** the system moves that application's currently open windows to logical Space 8 and reports the placement as a configured-default placement
 
 ### Requirement: Restore skips applications that are not running
 
@@ -189,7 +205,7 @@ Saved layouts SHALL contain only application identity, window title, and logical
 
 ### Requirement: Layout management commands
 
-`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout, without applying it, plus that display count's effective hook-command preview (see the `restore-hooks` capability). `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
+`mumu list` SHALL show all saved layouts along with the display count each is keyed to. `mumu show` SHALL display the contents of a saved layout, without applying it, plus that display count's effective hook-command preview (see the `restore-hooks` capability), configured pin rules (see the `window-pinning` capability), and configured `default_spaces` rules (see the `configuration` capability). `mumu delete` SHALL remove a saved layout for the current (or explicitly specified) display count, but only after the user confirms the deletion; passing `--yes` (or `-y`) SHALL skip the confirmation prompt.
 
 #### Scenario: Listing saved layouts
 
@@ -200,6 +216,11 @@ Saved layouts SHALL contain only application identity, window title, and logical
 
 - **WHEN** a user runs `mumu show` for a display count that has a saved layout
 - **THEN** the system displays that layout's window entries and that display count's effective hook-command preview, without moving any windows or running any command
+
+#### Scenario: Previewing configured default spaces
+
+- **WHEN** a user runs `mumu show` for a display count that has one or more `default_spaces` rules configured
+- **THEN** the system displays each rule's application bundle identifier and target Space, without performing any live-window matching
 
 #### Scenario: Deleting a saved layout
 

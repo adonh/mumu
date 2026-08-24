@@ -36,6 +36,7 @@ func planLayoutPhaseForTest(
 		liveByBundle,
 		usedIndex,
 		validAssignmentOrdinals,
+		map[string]int{},
 		primaryDisplayFallbackTarget,
 		identity,
 	)

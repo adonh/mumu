@@ -1,36 +1,4 @@
-## Purpose
-
-Gives mumu an explicit, user-editable YAML settings file so a user can discover and control where mumu stores its data, instead of that location being an invisible hardcoded path.
-
-## Requirements
-
-### Requirement: Config file location
-
-The system SHALL resolve its configuration file path as `$XDG_CONFIG_HOME/mumu/config.yaml` when the `XDG_CONFIG_HOME` environment variable is set to a non-empty value, and otherwise as `~/Library/Application Support/mumu/config.yaml`.
-
-#### Scenario: XDG_CONFIG_HOME is set
-
-- **WHEN** the `XDG_CONFIG_HOME` environment variable is set to `/custom/config`
-- **THEN** the system resolves its configuration file path as `/custom/config/mumu/config.yaml`
-
-#### Scenario: XDG_CONFIG_HOME is not set
-
-- **WHEN** the `XDG_CONFIG_HOME` environment variable is unset or empty
-- **THEN** the system resolves its configuration file path as `~/Library/Application Support/mumu/config.yaml`
-
-### Requirement: Config file is auto-created with discoverable defaults
-
-If the resolved configuration file does not exist when the system first needs configuration, the system SHALL create it (and any missing parent directories) containing the default settings and explanatory comments for each setting, before proceeding with the requested operation.
-
-#### Scenario: First run with no existing config file
-
-- **WHEN** a user runs any `mumu` command that reads configuration and no configuration file exists yet at the resolved path
-- **THEN** the system creates the configuration file at the resolved path with commented default settings, and proceeds using those defaults
-
-#### Scenario: Existing config file is left untouched
-
-- **WHEN** a user runs a `mumu` command and a configuration file already exists at the resolved path
-- **THEN** the system reads that file as-is and does not overwrite or regenerate it
+## MODIFIED Requirements
 
 ### Requirement: Config file format
 
@@ -136,12 +104,3 @@ If the configuration file's `hooks` setting is present but `hooks.off`, `hooks.o
 
 - **WHEN** a user runs a `mumu` command and the configuration file's `hooks.off`, `hooks.on`, or a `hooks.layouts` display-count entry's `off`/`on` is present but is not a list
 - **THEN** the system reports a clear error identifying the configuration file path, and makes no changes
-
-### Requirement: YAML files use two-space indentation
-
-Any YAML file mumu writes SHALL be encoded using two-space indentation. This applies to `config.yaml` and to any other YAML mumu generates now or in the future.
-
-#### Scenario: Generated config file uses two-space indentation
-
-- **WHEN** the system auto-creates `config.yaml` with default settings
-- **THEN** the file's YAML content, if and when it contains nested or list structure, uses two-space indentation

@@ -11,6 +11,7 @@ mumu's own settings.
 | `data_dir`       | string                                             | yes      | `$XDG_DATA_HOME/mumu` if set, else `~/Library/Application Support/mumu` | Directory mumu's `layouts/` subdirectory lives in. A leading `~` is expanded to the home directory. Must be a non-empty string. |
 | `pins`           | map of display count (int) to list of [pin rule](#pin-rule-object) | no | none (no pins configured) | Fixed application-window-to-Space assignments `mumu restore` applies, keyed by the number of connected displays. Different display counts can declare entirely different pins. |
 | `pin_precedence` | string (`pin` or `layout`)                         | no       | `pin`                                                                | Whether pin rules (`pin`) or saved-layout entries (`layout`) win when both would claim the same open window during `mumu restore`. |
+| `default_spaces` | map of display count (int) to list of [default-space rule](#default-space-rule-object) | no | none (no default spaces configured) | Fixed application-level fallback Spaces `mumu restore` applies to an app's leftover unclaimed windows, keyed by the number of connected displays. Overrides the prevalent-Space heuristic (see [CLI Guide — Default Spaces](CLI.md#default-spaces)) for any configured application. |
 | `hooks`          | [hooks object](#hooks-object)                      | no       | none (no hooks configured) | External commands run automatically around every `mumu restore`. See [Hooks object](#hooks-object). |
 
 ```yaml
@@ -30,6 +31,11 @@ pins:
       space: 5
 
 pin_precedence: pin
+
+default_spaces:
+  2:
+    - bundle_id: com.tinyspeck.slackmacgap
+      space: 1
 
 hooks:
   off:
@@ -51,6 +57,17 @@ One entry under a `pins` display-count list.
 | `bundle_id` | string | The pinned application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
 | `title`     | string | Approximate title pattern, matched the same way `mumu restore` matches saved-layout entries against open windows (shared-word similarity, not an exact match). Must be a non-empty string. |
 | `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)). Must be a positive integer. |
+
+### Default-space rule object
+
+One entry under a `default_spaces` display-count list.
+
+| Key         | Type   | Notes                                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `bundle_id` | string | The application's bundle identifier (e.g. `com.google.Chrome`). Must be a non-empty string. |
+| `space`     | int    | Target logical left-to-right Space number (see [CLI Guide — Space Numbering](CLI.md#space-numbering)) for that application's leftover unclaimed windows. Must be a positive integer. |
+
+Unlike a [pin rule](#pin-rule-object), there's no `title`: a default-space rule is application-level, not per-window. When configured for an application at the current display count, it always wins over the usual "most prevalent assigned Space" fallback for that application's leftover windows — even when that heuristic would otherwise produce an unambiguous (non-tied) target — and it also activates a fallback placement for an application with zero valid saved-entry matches this restore, a case that otherwise receives no fallback at all. See `mumu restore --help` and the `space-layout` capability spec for the full precedence order.
 
 ### Hooks object
 
@@ -78,6 +95,8 @@ Loading rules:
 - A missing `pins` setting means no pins are configured for any display count; `mumu restore` proceeds using only its saved-layout matching.
 - Any pin rule missing `bundle_id` or `title`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A `pin_precedence` value other than `pin` or `layout` is a load error (`CodeInvalidConfig`).
+- A missing `default_spaces` setting means no application has a configured default Space for any display count; `mumu restore` proceeds using only its prevalent-Space fallback heuristic.
+- Any default-space rule missing `bundle_id`, or with a `space` that isn't a positive integer, is a load error (`CodeInvalidConfig`) naming the config file path and the offending display count/app.
 - A missing `hooks` setting means no hooks are configured, globally or for any display count; `mumu restore` runs no external commands.
 - Any command entry that's neither a non-empty string nor a non-empty list of non-empty strings, or an `off`/`on` value that isn't a list, is a load error (`CodeInvalidConfig`) naming the config file path and the offending entry.
 - Malformed YAML is a load error (`CodeInvalidConfig`).

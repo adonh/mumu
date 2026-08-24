@@ -39,6 +39,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
+			map[string]int{},
 			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run for a unique target")
 
@@ -103,6 +104,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
+			map[string]int{},
 			func() (fallbackTarget, error) {
 				return fallbackTarget{ordinal: 7, sid: 107}, nil
 			},
@@ -146,6 +148,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			assignmentOrdinals,
+			map[string]int{},
 			func() (fallbackTarget, error) {
 				return fallbackTarget{}, errPrimarySpaceUnavailable
 			},
@@ -190,6 +193,7 @@ func TestPlanFallbackMoves(t *testing.T) {
 			liveByBundle,
 			usedByBundle,
 			map[string][]int{},
+			map[string]int{},
 			func() (fallbackTarget, error) {
 				t.Fatal("primary display resolver must not run without valid assignments")
 
@@ -213,6 +217,153 @@ func TestPlanFallbackMoves(t *testing.T) {
 			)
 		}
 	})
+
+	t.Run("configured default overrides an unambiguous prevalent Space", func(t *testing.T) {
+		t.Parallel()
+
+		liveByBundle := map[string][]window.AcrossSpacesEntry{
+			fallbackTestBundle: {
+				fallbackLiveEntry(1, "matched"),
+				fallbackLiveEntry(2, "unmatched"),
+			},
+		}
+		usedByBundle := map[string]map[int]bool{
+			fallbackTestBundle: {0: true},
+		}
+		assignmentOrdinals := map[string][]int{
+			fallbackTestBundle: {2, 2, 2},
+		}
+		defaultSpaces := map[string]int{
+			fallbackTestBundle: 6,
+		}
+
+		targets, skipped := planFallbackMoves(
+			liveByBundle,
+			usedByBundle,
+			assignmentOrdinals,
+			defaultSpaces,
+			func() (fallbackTarget, error) {
+				t.Fatal("primary display resolver must not run when a default is configured")
+
+				return fallbackTarget{}, nil
+			},
+			func(ordinal int) uint64 {
+				if ordinal != 6 {
+					t.Fatalf("fallback ordinal = %d, want configured default 6", ordinal)
+				}
+
+				return 106
+			},
+		)
+
+		if len(skipped) != 0 {
+			t.Fatalf("skipped = %#v, want none", skipped)
+		}
+
+		if len(targets) != 1 {
+			t.Fatalf("fallback targets = %d, want 1", len(targets))
+		}
+
+		if targets[0].entry.Ordinal != 6 || targets[0].sid != 106 {
+			t.Fatalf("fallback target = %#v, want configured ordinal 6 / space ID 106", targets[0])
+		}
+
+		if !targets[0].defaultConfigured {
+			t.Fatal("defaultConfigured marker = false, want true")
+		}
+	})
+
+	t.Run(
+		"configured default overrides a tied prevalent Space without a primary-display lookup",
+		func(t *testing.T) {
+			t.Parallel()
+
+			liveByBundle := map[string][]window.AcrossSpacesEntry{
+				fallbackTestBundle: {
+					fallbackLiveEntry(1, "matched"),
+					fallbackLiveEntry(2, "unmatched"),
+				},
+			}
+			usedByBundle := map[string]map[int]bool{
+				fallbackTestBundle: {0: true},
+			}
+			assignmentOrdinals := map[string][]int{
+				fallbackTestBundle: {2, 5},
+			}
+			defaultSpaces := map[string]int{
+				fallbackTestBundle: 8,
+			}
+
+			targets, skipped := planFallbackMoves(
+				liveByBundle,
+				usedByBundle,
+				assignmentOrdinals,
+				defaultSpaces,
+				func() (fallbackTarget, error) {
+					t.Fatal("primary display resolver must not run when a default is configured")
+
+					return fallbackTarget{}, nil
+				},
+				func(ordinal int) uint64 { return uint64(ordinal) },
+			)
+
+			if len(skipped) != 0 {
+				t.Fatalf("skipped = %#v, want none", skipped)
+			}
+
+			if len(targets) != 1 || targets[0].entry.Ordinal != 8 {
+				t.Fatalf("targets = %#v, want configured ordinal 8", targets)
+			}
+		},
+	)
+
+	t.Run(
+		"configured default activates a fallback with zero valid assignments",
+		func(t *testing.T) {
+			t.Parallel()
+
+			liveByBundle := map[string][]window.AcrossSpacesEntry{
+				fallbackTestBundle: {
+					fallbackLiveEntry(1, "one"),
+					fallbackLiveEntry(2, "two"),
+				},
+			}
+			usedByBundle := map[string]map[int]bool{}
+			defaultSpaces := map[string]int{
+				fallbackTestBundle: 9,
+			}
+
+			targets, skipped := planFallbackMoves(
+				liveByBundle,
+				usedByBundle,
+				map[string][]int{},
+				defaultSpaces,
+				func() (fallbackTarget, error) {
+					t.Fatal("primary display resolver must not run when a default is configured")
+
+					return fallbackTarget{}, nil
+				},
+				func(ordinal int) uint64 { return uint64(ordinal) },
+			)
+
+			if len(skipped) != 0 {
+				t.Fatalf("skipped = %#v, want none", skipped)
+			}
+
+			if len(targets) != 2 {
+				t.Fatalf(
+					"fallback targets = %d, want 2 (both windows, zero valid assignments)",
+					len(targets),
+				)
+			}
+
+			for _, target := range targets {
+				if target.entry.Ordinal != 9 || !target.defaultConfigured {
+					t.Fatalf("target = %#v, want ordinal 9 and defaultConfigured = true", target)
+				}
+			}
+		},
+	)
 }
 
 func TestMoveFailureSkipPreservesFallbackMarker(t *testing.T) {
