@@ -34,17 +34,17 @@ The system SHALL match a pin rule's application windows using the exact same tit
 
 ### Requirement: Pin precedence relative to saved-layout matching is configurable
 
-The system SHALL provide a `config.yaml` setting controlling whether pin rules or saved-layout entries take precedence when both would otherwise match the same currently open window during `mumu restore`: when pins take precedence, pin matching SHALL run first and any window it claims SHALL be excluded from saved-layout matching; when saved-layout entries take precedence, saved-layout matching (including its own application-level fallback placement) SHALL run first and pin matching SHALL only consider windows left unclaimed afterward. This setting SHALL default to pins taking precedence.
+The system SHALL provide a `config.yaml` setting controlling whether pin rules or saved-layout entries take precedence when both would otherwise match the same currently open window during `mumu restore`: when pins take precedence, pin matching SHALL run first and any window it claims SHALL be excluded from saved-layout matching; when saved-layout entries take precedence, saved-layout matching (including its own application-level fallback placement) SHALL run first and pin matching SHALL only consider windows left unclaimed afterward. This setting SHALL default to saved-layout entries taking precedence.
 
-#### Scenario: Pins take precedence (default)
+#### Scenario: Saved-layout entries take precedence (default)
 
-- **WHEN** the precedence setting is unset or set to prefer pins, and both a pin rule and a saved-layout entry for the same application would match the same currently open window
-- **THEN** the system moves that window to the pin's target Space, and the saved-layout entry is matched against a different remaining window or reported unmatched
-
-#### Scenario: Saved-layout entries take precedence
-
-- **WHEN** the precedence setting is set to prefer the saved layout, and both a pin rule and a saved-layout entry for the same application would match the same currently open window
+- **WHEN** the precedence setting is unset or set to prefer the saved layout, and both a pin rule and a saved-layout entry for the same application would match the same currently open window
 - **THEN** the system moves that window to the saved-layout entry's recorded Space, and the pin rule is matched against a different remaining window or left unapplied
+
+#### Scenario: Pins take precedence
+
+- **WHEN** the precedence setting is set to prefer pins, and both a pin rule and a saved-layout entry for the same application would match the same currently open window
+- **THEN** the system moves that window to the pin's target Space, and the saved-layout entry is matched against a different remaining window or reported unmatched
 
 ### Requirement: Pin matching moves windows using the same rules as saved-layout matching
 

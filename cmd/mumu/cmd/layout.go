@@ -590,6 +590,7 @@ func printRestoreSummary(
 
 	for _, reason := range []layout.SkipReason{
 		layout.SkipAppNotRunning,
+		layout.SkipWindowsClaimedElsewhere,
 		layout.SkipUnmatchedWindow,
 		layout.SkipOrdinalOutOfRange,
 		layout.SkipFallbackTargetUnavailable,

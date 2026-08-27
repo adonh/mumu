@@ -36,7 +36,7 @@ If the resolved configuration file does not exist when the system first needs co
 
 The configuration file SHALL be valid YAML understood by a human editor without external documentation, and SHALL support at minimum a `data_dir` setting: the directory mumu uses to store its data (see the `space-layout` capability for what that data contains). Values in `data_dir` SHALL support a leading `~` expanding to the user's home directory.
 
-The configuration file SHALL also support a `pins` setting: a mapping from connected-display-count to a list of pin rules (see the `window-pinning` capability), each rule specifying an application bundle identifier, a window-title pattern, and a target `ordinal` (mumu's own two-part `"<display>:<space>"` logical Space number, per the `space-layout` capability's two-part numbering). The configuration file SHALL also support a `pin_precedence` setting with the value `pin` or `layout`, controlling pin-vs-saved-layout precedence during `mumu restore` (see the `window-pinning` capability), defaulting to `pin` when absent.
+The configuration file SHALL also support a `pins` setting: a mapping from connected-display-count to a list of pin rules (see the `window-pinning` capability), each rule specifying an application bundle identifier, a window-title pattern, and a target `ordinal` (mumu's own two-part `"<display>:<space>"` logical Space number, per the `space-layout` capability's two-part numbering). The configuration file SHALL also support a `pin_precedence` setting with the value `pin` or `layout`, controlling pin-vs-saved-layout precedence during `mumu restore` (see the `window-pinning` capability), defaulting to `layout` when absent.
 
 The configuration file SHALL also support a `default_spaces` setting: a mapping from connected-display-count to a list of default-space rules, each rule specifying an application bundle identifier and a target `ordinal` (mumu's own two-part `"<display>:<space>"` logical Space number) (see the `space-layout` capability's application-level fallback). A display count with no configured `default_spaces` entries SHALL behave as if none are configured.
 
@@ -67,7 +67,7 @@ A pin rule's or default-space rule's target field SHALL be named `ordinal`, not 
 #### Scenario: Default pin precedence when unset
 
 - **WHEN** the configuration file has no `pin_precedence` setting
-- **THEN** the system treats pin rules as taking precedence over saved-layout entries during `mumu restore`
+- **THEN** the system treats saved-layout entries as taking precedence over pin rules during `mumu restore`
 
 #### Scenario: Configuring a default space for a display count
 

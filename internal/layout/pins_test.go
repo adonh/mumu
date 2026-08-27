@@ -21,6 +21,7 @@ const pinsTestTitle = "general"
 func planLayoutPhaseForTest(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
+	allLiveByBundle map[string][]window.AcrossSpacesEntry,
 ) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
 	usedIndex := map[string]map[int]bool{}
 
@@ -30,6 +31,7 @@ func planLayoutPhaseForTest(
 		usedIndex,
 		testSpaceCounts,
 		identityIDForOrdinal,
+		allLiveByBundle,
 	)
 
 	fallback, fallbackSkipped := planFallbackMoves(
@@ -162,6 +164,7 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(pinSkipped) != 0 || len(pinMoves) != 1 || pinMoves[0].windowID != 1 {
@@ -182,6 +185,7 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 	directMoves, directSkipped, fallbackMoves, fallbackSkipped := planLayoutPhaseForTest(
 		entriesByBundle,
 		layoutLive,
+		liveByBundle,
 	)
 
 	if len(directMoves)+len(fallbackMoves) != 0 {
@@ -193,9 +197,10 @@ func TestPinPrecedence_PinsClaimWindowFirst(t *testing.T) {
 		)
 	}
 
-	if len(directSkipped) != 1 || directSkipped[0].Reason != SkipAppNotRunning {
+	if len(directSkipped) != 1 || directSkipped[0].Reason != SkipWindowsClaimedElsewhere {
 		t.Fatalf(
-			"directSkipped = %#v, want the saved entry reported as if the app had no open windows",
+			"directSkipped = %#v, want the saved entry reported as claimed by the pin, "+
+				"not falsely as not-running",
 			directSkipped,
 		)
 	}
@@ -229,6 +234,7 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 	directMoves, directSkipped, fallbackMoves, fallbackSkipped := planLayoutPhaseForTest(
 		entriesByBundle,
 		liveByBundle,
+		liveByBundle,
 	)
 
 	if len(directSkipped)+len(fallbackSkipped) != 0 || len(directMoves) != 1 {
@@ -250,6 +256,7 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(pinMoves) != 0 {
@@ -259,9 +266,10 @@ func TestPinPrecedence_LayoutClaimsWindowFirst(t *testing.T) {
 		)
 	}
 
-	if len(pinSkipped) != 1 || pinSkipped[0].Reason != SkipAppNotRunning {
+	if len(pinSkipped) != 1 || pinSkipped[0].Reason != SkipWindowsClaimedElsewhere {
 		t.Fatalf(
-			"pinSkipped = %#v, want the pin reported as if the app had no open windows",
+			"pinSkipped = %#v, want the pin reported as claimed by the saved layout, "+
+				"not falsely as not-running",
 			pinSkipped,
 		)
 	}
@@ -295,6 +303,7 @@ func TestPinPrecedence_DisplacesLoserToTheOtherWindow(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(pinSkipped) != 0 || len(pinMoves) != 1 || pinMoves[0].windowID != 1 {
@@ -343,6 +352,7 @@ func TestPinMatching_ApproximateTitleMatch(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(skipped) != 0 {
@@ -384,6 +394,7 @@ func TestPinMatching_MultiplePinsResolveIndependently(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(skipped) != 0 {
@@ -424,6 +435,7 @@ func TestPinPrecedence_UnmatchedPinGetsNoFallback(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		map[string][]window.AcrossSpacesEntry{},
 	)
 
 	if len(pinMoves) != 0 {

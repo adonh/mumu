@@ -10,7 +10,7 @@ mumu's own settings.
 | ---------------- | ------------------------------------------------- | -------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `data_dir`       | string                                             | yes      | `$XDG_DATA_HOME/mumu` if set, else `~/Library/Application Support/mumu` | Directory mumu's `layouts/` subdirectory lives in. A leading `~` is expanded to the home directory. Must be a non-empty string. |
 | `pins`           | map of display count (int) to list of [pin rule](#pin-rule-object) | no | none (no pins configured) | Fixed application-window-to-Space assignments `mumu restore` applies, keyed by the number of connected displays. Different display counts can declare entirely different pins. |
-| `pin_precedence` | string (`pin` or `layout`)                         | no       | `pin`                                                                | Whether pin rules (`pin`) or saved-layout entries (`layout`) win when both would claim the same open window during `mumu restore`. |
+| `pin_precedence` | string (`pin` or `layout`)                         | no       | `layout`                                                             | Whether pin rules (`pin`) or saved-layout entries (`layout`) win when both would claim the same open window during `mumu restore`. |
 | `default_spaces` | map of display count (int) to list of [default-space rule](#default-space-rule-object) | no | none (no default spaces configured) | Fixed application-level fallback Spaces `mumu restore` applies to an app's leftover unclaimed windows, keyed by the number of connected displays. Overrides the prevalent-Space heuristic (see [CLI Guide — Default Spaces](CLI.md#default-spaces)) for any configured application. |
 | `hooks`          | [hooks object](#hooks-object)                      | no       | none (no hooks configured) | External commands run automatically around every `mumu restore`. See [Hooks object](#hooks-object). |
 
@@ -30,7 +30,7 @@ pins:
       title: "GitHub"
       ordinal: "2:1"
 
-pin_precedence: pin
+pin_precedence: layout
 
 default_spaces:
   2:

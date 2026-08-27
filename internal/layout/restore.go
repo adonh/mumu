@@ -20,6 +20,13 @@ const (
 	SkipOrdinalOutOfRange         SkipReason = "saved space no longer exists"
 	SkipFallbackTargetUnavailable SkipReason = "fallback space is unavailable"
 	SkipMoveFailed                SkipReason = "failed to move window"
+	// SkipWindowsClaimedElsewhere is reported instead of SkipAppNotRunning
+	// when an application has no live windows left for this phase to
+	// match only because the other precedence phase (pins vs. saved
+	// layout, see PinPrecedence) already claimed all of that
+	// application's windows this restore — the application is in fact
+	// running.
+	SkipWindowsClaimedElsewhere SkipReason = "windows already placed by higher-precedence rules this restore"
 )
 
 // SkippedEntry records a saved entry or transient fallback target that could
@@ -186,6 +193,7 @@ func Restore(
 			entriesByBundle,
 			liveByBundle,
 			defaultSpacesMap,
+			liveByBundle,
 		)
 
 		claimed := claimedWindowIDs(
@@ -199,6 +207,7 @@ func Restore(
 			map[string]map[int]bool{},
 			space.LeftToRightSpaceCounts(),
 			space.IDForOrdinal,
+			liveByBundle,
 		)
 	} else {
 		pinMoves, pinSkipped, _ = planDirectMoves(
@@ -207,6 +216,7 @@ func Restore(
 			map[string]map[int]bool{},
 			space.LeftToRightSpaceCounts(),
 			space.IDForOrdinal,
+			liveByBundle,
 		)
 
 		claimed := claimedWindowIDs(pinMoves)
@@ -216,6 +226,7 @@ func Restore(
 			entriesByBundle,
 			layoutLiveByBundle,
 			defaultSpacesMap,
+			liveByBundle,
 		)
 	}
 
@@ -302,11 +313,14 @@ func groupLiveByBundle(entries []window.AcrossSpacesEntry) map[string][]window.A
 // live-window pool, with its own fresh usedIndex map so the two calls
 // stay internally consistent regardless of whether liveByBundle is the
 // full live-window pool or one already filtered to exclude windows a
-// higher-precedence pin phase claimed.
+// higher-precedence pin phase claimed. allLiveByBundle is always the
+// full, unfiltered pool (see planDirectMoves) so an app already fully
+// claimed by pins is reported accurately rather than as not running.
 func planLayoutPhase(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	defaultSpaces map[string]space.Ordinal,
+	allLiveByBundle map[string][]window.AcrossSpacesEntry,
 ) ([]moveTarget, []SkippedEntry, []moveTarget, []SkippedEntry) {
 	usedIndex := map[string]map[int]bool{}
 
@@ -316,6 +330,7 @@ func planLayoutPhase(
 		usedIndex,
 		space.LeftToRightSpaceCounts(),
 		space.IDForOrdinal,
+		allLiveByBundle,
 	)
 
 	fallback, fallbackSkipped := planFallbackMoves(
@@ -355,13 +370,20 @@ func ordinalInBounds(ordinal space.Ordinal, spaceCounts []int) bool {
 // ordinals of every valid assignment, for planFallbackMoves to pick a
 // prevalent fallback target from. spaceCounts is the current per-display
 // Space-count sequence (left to right), used to bounds-check each entry's
-// ordinal independently per display.
+// ordinal independently per display. allLiveByBundle is the full,
+// unfiltered live-window pool for this restore — liveByBundle may already
+// have had windows removed that the other precedence phase claimed, and
+// allLiveByBundle lets an application with zero remaining windows here be
+// reported as SkipWindowsClaimedElsewhere rather than the misleading
+// SkipAppNotRunning when it's actually running with all its windows
+// already spoken for.
 func planDirectMoves(
 	entriesByBundle map[string][]Entry,
 	liveByBundle map[string][]window.AcrossSpacesEntry,
 	usedIndex map[string]map[int]bool,
 	spaceCounts []int,
 	spaceIDForOrdinal func(space.Ordinal) uint64,
+	allLiveByBundle map[string][]window.AcrossSpacesEntry,
 ) ([]moveTarget, []SkippedEntry, map[string][]space.Ordinal) {
 	bundleIDs := make([]string, 0, len(entriesByBundle))
 	for bundleID := range entriesByBundle {
@@ -382,10 +404,15 @@ func planDirectMoves(
 		live := liveByBundle[bundleID]
 
 		if len(live) == 0 {
+			reason := SkipAppNotRunning
+			if len(allLiveByBundle[bundleID]) > 0 {
+				reason = SkipWindowsClaimedElsewhere
+			}
+
 			for _, entry := range entries {
 				skipped = append(
 					skipped,
-					SkippedEntry{Entry: entry, Reason: SkipAppNotRunning},
+					SkippedEntry{Entry: entry, Reason: reason},
 				)
 			}
 
