@@ -141,7 +141,7 @@ type Config struct {
 	// for it. A display count with no configured pins has no entry.
 	Pins map[int][]PinRule
 	// PinPrecedence controls pin-vs-saved-layout precedence during
-	// restore. Defaults to PinPrecedencePin.
+	// restore. Defaults to PinPrecedenceLayout.
 	PinPrecedence PinPrecedence
 	// DefaultSpaces maps a connected-display-count to the application-level
 	// fallback-space rules configured for it. A display count with no
@@ -203,7 +203,7 @@ type fileFormat struct {
 	// Pins maps a display count to its list of pin rules. Absent or empty
 	// means no pins are configured for that display count.
 	Pins map[int][]pinRuleFileFormat `yaml:"pins"`
-	// PinPrecedence is "pin" or "layout"; empty means the default ("pin").
+	// PinPrecedence is "pin" or "layout"; empty means the default ("layout").
 	PinPrecedence string `yaml:"pin_precedence"` //nolint:tagliatelle // Stable user-facing config key name.
 	// DefaultSpaces maps a display count to its list of application-level
 	// default-space rules. Absent or empty means no default spaces are
@@ -358,12 +358,14 @@ func validatePins(path string, raw map[int][]pinRuleFileFormat) (map[int][]PinRu
 }
 
 // validatePinPrecedence resolves the raw pin_precedence string to a
-// PinPrecedence, defaulting to PinPrecedencePin when absent and reporting a
+// PinPrecedence, defaulting to PinPrecedenceLayout when absent — so an
+// overlapping pin never silently starves a saved-layout entry of its
+// window unless the user opts into pin-first behavior — and reporting a
 // clear error for any other value.
 func validatePinPrecedence(path, raw string) (PinPrecedence, error) {
 	switch raw {
 	case "":
-		return PinPrecedencePin, nil
+		return PinPrecedenceLayout, nil
 	case string(PinPrecedencePin):
 		return PinPrecedencePin, nil
 	case string(PinPrecedenceLayout):
@@ -466,7 +468,7 @@ func createDefault(path string) (*Config, error) {
 		return nil, derrors.Wrapf(err, derrors.CodeConfigIOFailed, "writing default config file")
 	}
 
-	return &Config{DataDir: paths.ExpandHome(dataDirRaw), PinPrecedence: PinPrecedencePin}, nil
+	return &Config{DataDir: paths.ExpandHome(dataDirRaw), PinPrecedence: PinPrecedenceLayout}, nil
 }
 
 func defaultConfigYAML(dataDir string) string {
@@ -495,11 +497,11 @@ func defaultConfigYAML(dataDir string) string {
 		"#       title: \"Slack\"\n" +
 		"#       ordinal: \"2:1\"\n" +
 		"\n" +
-		"# pin_precedence: whether pins (\"pin\", the default) or the saved layout\n" +
-		"# (\"layout\") wins when both would claim the same open window during\n" +
+		"# pin_precedence: whether pins (\"pin\") or the saved layout (\"layout\",\n" +
+		"# the default) wins when both would claim the same open window during\n" +
 		"# \"mumu restore\".\n" +
 		"#\n" +
-		"# pin_precedence: pin\n" +
+		"# pin_precedence: layout\n" +
 		"\n" +
 		"# default_spaces: fixed application-level fallback Spaces, applied by\n" +
 		"# \"mumu restore\" to any of an app's currently open windows left over\n" +

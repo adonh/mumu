@@ -36,6 +36,7 @@ func TestPlanDirectMoves_MatchesByTitleSimilarity(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(skipped) != 0 {
@@ -84,6 +85,7 @@ func TestPlanDirectMoves_OneToOneWhenTwoEntriesPreferTheSameWindow(t *testing.T)
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(skipped) != 0 {
@@ -133,6 +135,7 @@ func TestPlanDirectMoves_UnmatchedWhenAppNotRunning(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		func(space.Ordinal) uint64 { return 0 },
+		map[string][]window.AcrossSpacesEntry{},
 	)
 
 	if len(toMove) != 0 {
@@ -141,6 +144,46 @@ func TestPlanDirectMoves_UnmatchedWhenAppNotRunning(t *testing.T) {
 
 	if len(skipped) != 1 || skipped[0].Reason != SkipAppNotRunning {
 		t.Fatalf("skipped = %#v, want one SkipAppNotRunning", skipped)
+	}
+
+	if len(validOrdinals) != 0 {
+		t.Fatalf("validAssignmentOrdinals = %#v, want none", validOrdinals)
+	}
+}
+
+// TestPlanDirectMoves_ClaimedElsewhereWhenOtherPhaseTookAllWindows covers
+// the case a higher-precedence phase (pins vs. saved layout) already
+// claimed every one of an application's windows before this phase ran:
+// liveByBundle has nothing left for that bundle, but allLiveByBundle
+// shows it did have windows, so the skip reason must say so rather than
+// falsely reporting the application as not running.
+func TestPlanDirectMoves_ClaimedElsewhereWhenOtherPhaseTookAllWindows(t *testing.T) {
+	t.Parallel()
+
+	entriesByBundle := map[string][]Entry{
+		fallbackTestBundle: {
+			{BundleID: fallbackTestBundle, Title: testTitleReport, Ordinal: ord(1)},
+		},
+	}
+	allLiveByBundle := map[string][]window.AcrossSpacesEntry{
+		fallbackTestBundle: {liveEntry(testTitleReport)},
+	}
+
+	toMove, skipped, validOrdinals := planDirectMoves(
+		entriesByBundle,
+		map[string][]window.AcrossSpacesEntry{}, // filtered down to nothing by the other phase
+		map[string]map[int]bool{},
+		testSpaceCounts,
+		identityIDForOrdinal,
+		allLiveByBundle,
+	)
+
+	if len(toMove) != 0 {
+		t.Fatalf("toMove = %#v, want none", toMove)
+	}
+
+	if len(skipped) != 1 || skipped[0].Reason != SkipWindowsClaimedElsewhere {
+		t.Fatalf("skipped = %#v, want one SkipWindowsClaimedElsewhere", skipped)
 	}
 
 	if len(validOrdinals) != 0 {
@@ -167,6 +210,7 @@ func TestPlanDirectMoves_UnmatchedWhenMoreEntriesThanWindows(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(toMove) != 1 {
@@ -196,6 +240,7 @@ func TestPlanDirectMoves_SkipsOutOfRangeOrdinal(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(toMove) != 0 {
@@ -236,6 +281,7 @@ func TestPlanDirectMoves_SkipsOutOfRangeDisplay(t *testing.T) {
 		map[string]map[int]bool{},
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	if len(toMove) != 0 {
@@ -311,6 +357,7 @@ func TestFallbackAndFuzzyMarkersAreDisjoint(t *testing.T) {
 		usedIndex,
 		testSpaceCounts,
 		identityIDForOrdinal,
+		liveByBundle,
 	)
 
 	fallbackMoves, _ := planFallbackMoves(

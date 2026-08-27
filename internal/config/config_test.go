@@ -263,8 +263,8 @@ func TestLoad_PinsAbsentDefaultsToNoPinsAndPinPrecedence(t *testing.T) {
 		t.Fatalf("cfg.Pins = %+v, want empty", cfg.Pins)
 	}
 
-	if cfg.PinPrecedence != config.PinPrecedencePin {
-		t.Fatalf("cfg.PinPrecedence = %q, want %q", cfg.PinPrecedence, config.PinPrecedencePin)
+	if cfg.PinPrecedence != config.PinPrecedenceLayout {
+		t.Fatalf("cfg.PinPrecedence = %q, want %q", cfg.PinPrecedence, config.PinPrecedenceLayout)
 	}
 }
 
