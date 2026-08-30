@@ -25,3 +25,13 @@ The split is deliberate: **JSON for internal state, YAML for user-facing config.
 **YAML indentation convention:** any YAML mumu writes uses two-space indentation, not the go-yaml library's 4-space default. `config.yaml` is currently a flat hand-written string, so this has no visible effect yet, but if a future setting needs an actual YAML encoder (nested structure, lists), configure its indent width to 2 explicitly rather than accepting the library default. See `internal/config/doc.go`.
 
 See [`docs/CONFIG_SCHEMA.md`](docs/CONFIG_SCHEMA.md) for the full field-level schema of both files.
+
+## Learned User Preferences
+
+- When asked to prepare a clean branch/PR for one change while the working tree already has unrelated, tangled, uncommitted edits sharing the same files/lines: create the new branch first (carries over uncommitted changes as-is), then isolate the unrelated work into its own first commit by inverting just the session's own edits (replay each edit's old_string/new_string pair in reverse), then re-apply and commit the session's edits separately. This only works cleanly when edits were made as precisely-scoped `StrReplace` pairs rather than full-file rewrites, since only those are exactly invertible.
+
+## Learned Workspace Facts
+
+- `pin_precedence` (in `config.yaml`) defaults to `"layout"`, not `"pin"`: when a `pins:` rule and a saved-layout entry would both claim the same open window during `mumu restore`, the saved layout wins unless the user opts into pin-first via `pin_precedence: pin`. Rationale: pins are documented as filling in for windows a saved layout doesn't cover, so the richer/primary saved-layout artifact should win by default — pins overriding it by default was surprising and could silently starve saved-layout entries of their windows, misreporting a genuinely-running app as `application is not running`.
+- `internal/layout/restore.go`'s `planDirectMoves`/`planLayoutPhase` take an `allLiveByBundle` parameter (the full, unfiltered live-window map) separately from whichever filtered pool that phase actually matches against, so restore can distinguish "app genuinely not running" (`SkipAppNotRunning`) from "app is running but every window was already claimed by the other precedence phase this restore" (`SkipWindowsClaimedElsewhere`, also listed in the CLI's ordered skip-reason list in `cmd/mumu/cmd/layout.go`). Don't collapse these two cases back into one skip reason.
+- `gh` CLI is not authenticated in this dev environment (`gh repo view` / `gh issue create` / `gh pr create` fail with `HTTP 401`); when asked to create issues or PRs, write out the intended issue/PR text for the user to paste manually instead of assuming `gh` will succeed.

@@ -9,6 +9,13 @@ BUILD_DATE := `date -u +"%Y-%m-%dT%H:%M:%SZ"`
 
 LDFLAGS := "-s -w -X github.com/adonh/mumu/cmd/mumu/cmd.Version=" + VERSION + " -X github.com/adonh/mumu/cmd/mumu/cmd.GitCommit=" + GIT_COMMIT + " -X github.com/adonh/mumu/cmd/mumu/cmd.BuildDate=" + BUILD_DATE
 
+# Name of the stable local code-signing identity `build`/`bundle` use when
+# present (see `setup-codesign-identity` and docs/DEVELOPMENT.md). Without
+# it, both recipes fall back to ad-hoc signing, whose identity changes on
+# every rebuild and can silently invalidate a previously granted
+# Accessibility/Screen Recording permission.
+CODESIGN_IDENTITY := "mumu-dev-signing"
+
 @help *RECIPE:
     set -- {{RECIPE}} ; \
     [ -n "${1-}" ] && \
@@ -17,10 +24,24 @@ LDFLAGS := "-s -w -X github.com/adonh/mumu/cmd/mumu/cmd.Version=" + VERSION + " 
 
 # Build the binary
 build:
-    @echo "Building Mumu..."
-    @echo "Version: {{ VERSION }}"
-    {{ if os() == "windows" { "CGO_ENABLED=0" } else { "CGO_ENABLED=1" } }} go build -ldflags="{{ LDFLAGS }}" -o bin/mumu{{ if os() == "windows" { ".exe" } else { "" } }} ./cmd/mumu
-    @echo "✓ Build complete: bin/mumu"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Building Mumu..."
+    echo "Version: {{ VERSION }}"
+    if [ "{{ os() }}" = "windows" ]; then
+        CGO_ENABLED=0 go build -ldflags="{{ LDFLAGS }}" -o bin/mumu.exe ./cmd/mumu
+        echo "✓ Build complete: bin/mumu.exe"
+        exit 0
+    fi
+    CGO_ENABLED=1 go build -ldflags="{{ LDFLAGS }}" -o bin/mumu ./cmd/mumu
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "{{ CODESIGN_IDENTITY }}"; then
+        codesign --force --sign "{{ CODESIGN_IDENTITY }}" bin/mumu
+    else
+        echo "⚠ No stable code-signing identity found (run 'just setup-codesign-identity' once)." >&2
+        echo "  Falling back to ad-hoc signing — Accessibility/Screen Recording grants may not survive the next rebuild." >&2
+        codesign --force --sign - bin/mumu
+    fi
+    echo "✓ Build complete: bin/mumu"
 
 build-darwin:
     @echo "Building Mumu for macOS..."
@@ -48,7 +69,9 @@ release-ci-darwin ARCH VERSION_OVERRIDE:
 
 # Bundle the application
 bundle: release
-    @echo "Bundling Mumu..."
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Bundling Mumu..."
     mkdir -p build/Mumu.app/Contents/{MacOS,Resources}
 
     cp -r bin/mumu build/Mumu.app/Contents/MacOS/mumu
@@ -58,9 +81,16 @@ bundle: release
 
     sed "s/VERSION/{{ VERSION }}/g" resources/Info.plist.template > build/Mumu.app/Contents/Info.plist
 
-    codesign --force --deep --sign - --entitlements resources/Mumu.entitlements --options runtime build/Mumu.app
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "{{ CODESIGN_IDENTITY }}"; then
+        IDENTITY="{{ CODESIGN_IDENTITY }}"
+    else
+        echo "⚠ No stable code-signing identity found (run 'just setup-codesign-identity' once)." >&2
+        echo "  Falling back to ad-hoc signing — Accessibility/Screen Recording grants may not survive the next rebuild." >&2
+        IDENTITY="-"
+    fi
+    codesign --force --deep --sign "$IDENTITY" --entitlements resources/Mumu.entitlements --options runtime build/Mumu.app
 
-    @echo "✓ Bundle complete: build/Mumu.app"
+    echo "✓ Bundle complete: build/Mumu.app"
 
 # Run tests
 
@@ -167,6 +197,76 @@ verify:
     go mod verify
     @echo "✓ Dependencies verified"
 
+# Create a stable local code-signing identity for development (idempotent;
+# safe to re-run). Without this, `build`/`bundle` fall back to ad-hoc
+# signing, whose identity changes on every rebuild and can silently
+# invalidate a previously granted Accessibility/Screen Recording
+# permission. Run this once per machine; see docs/DEVELOPMENT.md.
+setup-codesign-identity:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # A dedicated keychain (not the user's login keychain) with a fixed,
+    # known password. This isn't a real secret — it only exists so the
+    # `security` commands below can unlock/authorize non-interactively;
+    # using the real login keychain here made `set-key-partition-list`
+    # pop a GUI authorization dialog that blocks headless/scripted runs.
+    KEYCHAIN="$HOME/Library/Keychains/mumu-dev.keychain-db"
+    KEYCHAIN_PASSWORD="mumu-dev-codesign"
+
+    if [ -f "$KEYCHAIN" ] && security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "{{ CODESIGN_IDENTITY }}"; then
+        echo "✓ Code-signing identity '{{ CODESIGN_IDENTITY }}' already exists. Nothing to do."
+        exit 0
+    fi
+
+    echo "Creating self-signed code-signing identity '{{ CODESIGN_IDENTITY }}'..."
+    WORKDIR=$(mktemp -d)
+    trap 'rm -rf "$WORKDIR"' EXIT
+
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$WORKDIR/key.pem" -out "$WORKDIR/cert.pem" \
+        -days 3650 -subj "/CN={{ CODESIGN_IDENTITY }}" \
+        -addext "keyUsage=critical,digitalSignature" \
+        -addext "extendedKeyUsage=codeSigning" 2>/dev/null
+
+    # OpenSSL 3's default PKCS#12 MAC (PBKDF2 + SHA-256) isn't verifiable by
+    # macOS's `security import`; force the legacy SHA-1 MAC when available.
+    P12_ARGS=()
+    if openssl pkcs12 -help 2>&1 | grep -q -- '-legacy'; then
+        P12_ARGS=(-legacy -macalg sha1)
+    fi
+    openssl pkcs12 -export "${P12_ARGS[@]}" \
+        -inkey "$WORKDIR/key.pem" -in "$WORKDIR/cert.pem" \
+        -out "$WORKDIR/identity.p12" -passout pass:mumu-dev 2>/dev/null
+
+    if [ ! -f "$KEYCHAIN" ]; then
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+    fi
+    security set-keychain-settings -lut 21600 "$KEYCHAIN"
+    security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+    security import "$WORKDIR/identity.p12" -k "$KEYCHAIN" -P mumu-dev -T /usr/bin/codesign
+    # Let codesign use the key without an interactive keychain-unlock prompt.
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+    # Self-signed certs import as untrusted; trust it for code signing only
+    # (user trust domain — affects nothing outside your own account).
+    security add-trusted-cert -p codeSign -k "$KEYCHAIN" "$WORKDIR/cert.pem"
+
+    # Add the dedicated keychain to the user's search list so `codesign`
+    # and `security find-identity` (called without an explicit --keychain)
+    # in the `build`/`bundle` recipes can find the identity too.
+    mapfile -t EXISTING_KEYCHAINS < <(security list-keychains -d user | sed 's/^ *"//; s/"$//')
+    ALREADY_LISTED=0
+    for kc in "${EXISTING_KEYCHAINS[@]}"; do
+        [ "$kc" = "$KEYCHAIN" ] && ALREADY_LISTED=1
+    done
+    if [ "$ALREADY_LISTED" -eq 0 ]; then
+        security list-keychains -d user -s "${EXISTING_KEYCHAINS[@]}" "$KEYCHAIN"
+    fi
+
+    echo "✓ Created and trusted '{{ CODESIGN_IDENTITY }}' for code signing (keychain: $KEYCHAIN)."
+    echo "  You'll need to grant Accessibility/Screen Recording to mumu once more after this;"
+    echo "  future rebuilds via 'just build'/'just bundle' will keep the grant."
+
 alias setup-pre-commit := setup-prek
 setup-prek:
     if command -v prek >/dev/null; then \
@@ -187,5 +287,5 @@ openspec-update:
     openspec config profile core && \
     openspec update --force
 
-setup: setup-prek openspec-update
+setup: setup-prek setup-codesign-identity openspec-update
     @printf '\nReady!!!\n'

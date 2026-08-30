@@ -4,7 +4,7 @@
 
 1. Run `mumu status` — confirm both Accessibility and Screen Recording are granted.
 2. Make sure you granted permission to the exact binary you run (Homebrew cask path vs. a locally built `bin/mumu`) — granting one doesn't carry over to the other.
-3. If you just rebuilt `mumu` (e.g. from source) after granting, macOS's permission cache (TCC) can take a few seconds to catch up even though the toggle shows enabled — re-run the command once more before assuming it's broken.
+3. If you just rebuilt `mumu` from source and it worked before but not now, this is expected with the default build setup: `just build`/`just bundle` ad-hoc sign by default, and macOS's TCC ties an Accessibility grant to the binary's code identity — ad-hoc signing's identity changes on every rebuild, so a grant that worked before the rebuild can silently stop matching. This isn't a delay/cache-catchup issue and won't resolve itself by re-running the command. Run `just setup-codesign-identity` once (see [DEVELOPMENT.md](DEVELOPMENT.md#code-signing-and-accessibility-permissions)) so future rebuilds keep a stable identity, then re-grant Accessibility/Screen Recording one more time.
 
 ## Permission prompt keeps reappearing
 
