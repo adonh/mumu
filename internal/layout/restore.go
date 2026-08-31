@@ -162,10 +162,7 @@ func Restore(
 ) (RestoreSummary, error) {
 	summary := RestoreSummary{}
 
-	err := ensureLayoutPermissions()
-	if err != nil {
-		return summary, err
-	}
+	warnMissingPermissions(progress)
 
 	progress.emit("Scanning currently open windows...")
 
