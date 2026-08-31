@@ -67,3 +67,32 @@ func FriendlyError(result CheckResult) error {
 
 	return nil
 }
+
+// Warnings returns a one-line warning for each permission mumu needs that
+// Check reported as not granted, instead of a hard error. Callers that
+// want to proceed even when a permission looks missing (rather than
+// blocking via FriendlyError) use this: the check itself can report a
+// false negative in some environments — for example, an enterprise
+// MDM-managed Mac whose PPPC policy silently overrides a manual grant
+// underneath an otherwise-correct-looking System Settings toggle (see
+// docs/TROUBLESHOOTING.md) — so treating "not granted" as fatal can block
+// an operation that would actually have succeeded. The real native calls
+// mumu makes will fail on their own if the permission is genuinely
+// missing, which is a more reliable signal than this preflight check.
+func Warnings(result CheckResult) []string {
+	var warnings []string
+
+	if !result.Accessibility {
+		warnings = append(warnings, "Accessibility permission does not appear to be granted; "+
+			"continuing anyway, since this check can be wrong (see docs/TROUBLESHOOTING.md). "+
+			"Window/Space moves will fail below if it's genuinely missing.")
+	}
+
+	if !result.ScreenRecording {
+		warnings = append(warnings, "Screen Recording permission does not appear to be granted; "+
+			"continuing anyway, since this check can be wrong. Window titles used for matching "+
+			"may come back empty if it's genuinely missing, which can cause unmatched entries.")
+	}
+
+	return warnings
+}

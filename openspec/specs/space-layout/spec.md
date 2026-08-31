@@ -315,8 +315,13 @@ All layout save and restore operations SHALL function using only user-grantable 
 
 #### Scenario: Screen Recording not granted
 
-- **WHEN** a user runs `mumu save` or `mumu restore` without having granted Screen Recording permission
-- **THEN** the system reports clearly that Screen Recording permission is required and makes no changes
+- **WHEN** a user runs `mumu save` or `mumu restore` and mumu's own preflight check reports Screen Recording as not granted
+- **THEN** the system prints a warning that Screen Recording permission does not appear to be granted and proceeds with the operation anyway, rather than stopping — since this preflight check can itself be wrong in some environments (see [GitHub Issue #33](https://github.com/adonh/mumu/issues/33)) — and reports whatever the operation's actual outcome is (success, or the specific failures/skips that result if the permission is genuinely missing)
+
+#### Scenario: Accessibility not granted
+
+- **WHEN** a user runs `mumu save` or `mumu restore` and mumu's own preflight check reports Accessibility as not granted
+- **THEN** the system prints a warning that Accessibility permission does not appear to be granted and proceeds with the operation anyway, rather than stopping, for the same reason as the Screen Recording case above
 
 ### Requirement: Configurable output ordering for layout entries
 

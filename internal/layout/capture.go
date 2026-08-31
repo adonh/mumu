@@ -15,8 +15,14 @@ type CaptureSummary struct {
 	FullscreenSkipped int
 }
 
-func ensureLayoutPermissions() error {
-	return permissions.FriendlyError(permissions.Check())
+// warnMissingPermissions reports (via progress) any of the permissions
+// mumu needs that Check found not granted, without stopping the caller —
+// see permissions.Warnings for why a missing permission isn't treated as
+// fatal here.
+func warnMissingPermissions(progress ProgressFunc) {
+	for _, warning := range permissions.Warnings(permissions.Check()) {
+		progress.emit("Warning: " + warning)
+	}
 }
 
 // Capture records the current assignment of application windows to Mission
@@ -27,10 +33,7 @@ func ensureLayoutPermissions() error {
 // progress, if non-nil, receives status updates while the (potentially
 // slow) native window enumeration runs; pass nil to discard them.
 func Capture(progress ProgressFunc) (*Layout, CaptureSummary, error) {
-	err := ensureLayoutPermissions()
-	if err != nil {
-		return nil, CaptureSummary{}, err
-	}
+	warnMissingPermissions(progress)
 
 	spaceCounts := space.LeftToRightSpaceCounts()
 
